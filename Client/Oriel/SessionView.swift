@@ -271,6 +271,8 @@ struct SessionView: View {
                 chordChip("⌃←", flag: EventFlags.control, code: VirtualKey.leftArrow)
                 chordChip("⌃→", flag: EventFlags.control, code: VirtualKey.rightArrow)
                 chordChip("⌘M", flag: EventFlags.command, code: VirtualKey.letter("m") ?? 46)
+                chordChip("⌘C", flag: EventFlags.command, code: 8)
+                chordChip("⌘V", flag: EventFlags.command, code: 9)
                 symbolChip("doc.on.clipboard") { session.sendClipboard() }
                 symbolChip("folder") { showImporter = true }
 
@@ -433,6 +435,7 @@ struct GestureHelpView: View {
         Row(gesture: "2-finger tap", action: "Right click"),
         Row(gesture: "Analog stick", action: "Move the pointer (speed by deflection)"),
         Row(gesture: "Analog L / R", action: "Hold to drag, tap to click"),
+        Row(gesture: "Analog C / V", action: "Copy / paste on the Mac"),
         Row(gesture: "Pinch", action: "Zoom 1×–4× (sharp crop)"),
         Row(gesture: "Double-tap", action: "Toggle 2× zoom"),
         Row(gesture: "Key bar ⌃↑", action: "Mission Control"),

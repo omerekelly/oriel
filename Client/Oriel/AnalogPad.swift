@@ -12,18 +12,23 @@ final class AnalogPadView: UIView {
     var onMove: ((CGFloat, CGFloat) -> Void)?
     var onScroll: ((Int) -> Void)?
     var onButton: ((Int, Bool) -> Void)?
+    var onKey: ((UInt16, UInt64) -> Void)?
 
     private let stickBase = UIView()
     private let stickKnob = UIView()
     private let leftButton = UIView()
     private let rightButton = UIView()
+    private let copyButton = UIView()
+    private let pasteButton = UIView()
     private let scrollPad = UIView()
     private let leftLabel = UILabel()
     private let rightLabel = UILabel()
+    private let copyLabel = UILabel()
+    private let pasteLabel = UILabel()
     private let upChevron = UIImageView(image: UIImage(systemName: "chevron.up"))
     private let downChevron = UIImageView(image: UIImage(systemName: "chevron.down"))
 
-    private enum Zone { case stick, click, right, scroll }
+    private enum Zone { case stick, click, right, scroll, copy, paste }
     private var activeZone: Zone?
 
     private var stickVector = CGPoint.zero
@@ -34,11 +39,12 @@ final class AnalogPadView: UIView {
     private var link: CADisplayLink?
     private var lastTick: CFTimeInterval = 0
 
-    private let stickSize: CGFloat = 148
-    private let knobSize: CGFloat = 62
-    private let buttonSize: CGFloat = 72
-    private let scrollWidth: CGFloat = 54
-    private let gap: CGFloat = 16
+    private let stickSize: CGFloat = 140
+    private let knobSize: CGFloat = 58
+    private let buttonSize: CGFloat = 64
+    private let scrollWidth: CGFloat = 52
+    private let gap: CGFloat = 12
+    private let buttonGap: CGFloat = 8
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -70,7 +76,7 @@ final class AnalogPadView: UIView {
         stickKnob.layer.shadowRadius = 6
         stickKnob.layer.shadowOffset = CGSize(width: 0, height: 2)
 
-        for button in [leftButton, rightButton] {
+        for button in [leftButton, rightButton, copyButton, pasteButton] {
             button.backgroundColor = UIColor.white.withAlphaComponent(0.10)
             button.layer.borderColor = UIColor.white.withAlphaComponent(0.14).cgColor
             button.layer.borderWidth = 1
@@ -78,10 +84,12 @@ final class AnalogPadView: UIView {
 
         leftLabel.text = "L"
         rightLabel.text = "R"
-        for label in [leftLabel, rightLabel] {
+        copyLabel.text = "C"
+        pasteLabel.text = "V"
+        for label in [leftLabel, rightLabel, copyLabel, pasteLabel] {
             label.textAlignment = .center
             label.textColor = .white
-            label.font = .systemFont(ofSize: 22, weight: .semibold)
+            label.font = .systemFont(ofSize: 19, weight: .semibold)
         }
 
         scrollPad.backgroundColor = UIColor.white.withAlphaComponent(0.06)
@@ -92,12 +100,14 @@ final class AnalogPadView: UIView {
             chevron.contentMode = .scaleAspectFit
         }
 
-        for view in [stickBase, stickKnob, leftButton, rightButton, scrollPad] {
+        for view in [stickBase, stickKnob, leftButton, rightButton, copyButton, pasteButton, scrollPad] {
             view.isUserInteractionEnabled = false
             addSubview(view)
         }
         leftButton.addSubview(leftLabel)
         rightButton.addSubview(rightLabel)
+        copyButton.addSubview(copyLabel)
+        pasteButton.addSubview(pasteLabel)
         scrollPad.addSubview(upChevron)
         scrollPad.addSubview(downChevron)
 
@@ -119,19 +129,25 @@ final class AnalogPadView: UIView {
                                  y: stickBase.frame.midY - knobSize / 2,
                                  width: knobSize, height: knobSize)
 
-        let buttonX = stickBase.frame.maxX + gap
-        leftButton.frame = CGRect(x: buttonX,
-                                  y: stickBase.frame.midY - buttonSize - 4,
-                                  width: buttonSize, height: buttonSize)
-        rightButton.frame = CGRect(x: buttonX,
-                                   y: stickBase.frame.midY + 4,
-                                   width: buttonSize, height: buttonSize)
-        leftButton.layer.cornerRadius = buttonSize / 2
-        rightButton.layer.cornerRadius = buttonSize / 2
+        let gridX = stickBase.frame.maxX + gap
+        let columnTwo = gridX + buttonSize + buttonGap
+        let topRow = stickBase.frame.midY - buttonSize - 4
+        let bottomRow = stickBase.frame.midY + 4
+
+        leftButton.frame = CGRect(x: gridX, y: topRow, width: buttonSize, height: buttonSize)
+        rightButton.frame = CGRect(x: columnTwo, y: topRow, width: buttonSize, height: buttonSize)
+        copyButton.frame = CGRect(x: gridX, y: bottomRow, width: buttonSize, height: buttonSize)
+        pasteButton.frame = CGRect(x: columnTwo, y: bottomRow, width: buttonSize, height: buttonSize)
+
+        for button in [leftButton, rightButton, copyButton, pasteButton] {
+            button.layer.cornerRadius = buttonSize / 2
+        }
         leftLabel.frame = leftButton.bounds
         rightLabel.frame = rightButton.bounds
+        copyLabel.frame = copyButton.bounds
+        pasteLabel.frame = pasteButton.bounds
 
-        scrollPad.frame = CGRect(x: leftButton.frame.maxX + gap,
+        scrollPad.frame = CGRect(x: columnTwo + buttonSize + gap,
                                  y: stickBase.frame.minY,
                                  width: scrollWidth, height: stickSize)
         scrollPad.layer.cornerRadius = 16
@@ -147,6 +163,8 @@ final class AnalogPadView: UIView {
         if leftButton.frame.contains(point) { return .click }
         if rightButton.frame.contains(point) { return .right }
         if scrollPad.frame.contains(point) { return .scroll }
+        if copyButton.frame.contains(point) { return .copy }
+        if pasteButton.frame.contains(point) { return .paste }
         return nil
     }
 
@@ -171,6 +189,12 @@ final class AnalogPadView: UIView {
             lastScrollY = point.y
             scrollResidual = 0
             scrollPad.backgroundColor = UIColor.white.withAlphaComponent(0.10)
+        case .copy:
+            flash(copyButton)
+            onKey?(8, 0x00100000)   // ⌘C
+        case .paste:
+            flash(pasteButton)
+            onKey?(9, 0x00100000)   // ⌘V
         }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
@@ -225,6 +249,8 @@ final class AnalogPadView: UIView {
             onButton?(1, false)
         case .scroll:
             scrollPad.backgroundColor = UIColor.white.withAlphaComponent(0.06)
+        case .copy, .paste:
+            break
         case .stick:
             stickVector = .zero
             updateKnob()
@@ -232,6 +258,13 @@ final class AnalogPadView: UIView {
             break
         }
         activeZone = nil
+    }
+
+    private func flash(_ button: UIView) {
+        button.backgroundColor = UIColor(red: 0.949, green: 0.710, blue: 0.267, alpha: 0.55)
+        UIView.animate(withDuration: 0.25, delay: 0.1, options: [.allowUserInteraction]) {
+            button.backgroundColor = UIColor.white.withAlphaComponent(0.10)
+        }
     }
 
     private func updateKnob() {
@@ -289,6 +322,9 @@ struct AnalogPad: UIViewRepresentable {
         }
         view.onButton = { index, down in
             onInput(.button(button: index, down: down))
+        }
+        view.onKey = { code, flags in
+            onInput(.chord(code: code, flags: flags))
         }
     }
 }
