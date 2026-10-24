@@ -3,12 +3,26 @@ import SwiftUI
 import AVFoundation
 import CoreMedia
 
-enum InputMode: String {
+enum InputMode: String, CaseIterable {
     case trackpad
+    case analog
     case direct
 
-    var label: String { self == .trackpad ? "Trackpad" : "Direct" }
-    var symbol: String { self == .trackpad ? "hand.draw" : "cursorarrow.rays" }
+    var label: String {
+        switch self {
+        case .trackpad: return "Trackpad"
+        case .analog: return "Analog"
+        case .direct: return "Direct"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .trackpad: return "hand.draw"
+        case .analog: return "gamecontroller"
+        case .direct: return "cursorarrow.rays"
+        }
+    }
 }
 
 /// Bridges decoded frames from the session into the rendering view without
@@ -413,7 +427,7 @@ final class StreamSurface: UIView {
         let duration = Date().timeIntervalSince(startTime)
         if !hasMoved && duration < 0.38 {
             switch mode {
-            case .trackpad:
+            case .trackpad, .analog:
                 onInput?(.click(x: nil, y: nil))
             case .direct:
                 if let touch = touches.first {

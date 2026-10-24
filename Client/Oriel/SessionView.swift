@@ -5,7 +5,9 @@ import UniformTypeIdentifiers
 struct SessionView: View {
     @ObservedObject var session: ClientSession
 
-    @State private var mode: InputMode = .trackpad
+    @State private var mode: InputMode = InputMode(
+        rawValue: UserDefaults.standard.string(forKey: "inputMode") ?? ""
+    ) ?? .trackpad
     @State private var keyboardVisible = false
     @State private var modifiers: UInt64 = 0
     @State private var hudDimmed = false
@@ -43,6 +45,18 @@ struct SessionView: View {
                 hud
                     .padding(.horizontal, 12)
                     .padding(.top, 8)
+
+                Spacer(minLength: 0)
+
+                if mode == .analog, !keyboardVisible {
+                    AnalogPad { event in
+                        session.sendInput(event)
+                    }
+                    .frame(height: 168)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 10)
+                }
+
                 if let status = session.transferStatus {
                     Text(status)
                         .font(.caption)
@@ -53,7 +67,6 @@ struct SessionView: View {
                         .foregroundStyle(.white)
                         .padding(.bottom, 6)
                 }
-                Spacer(minLength: 0)
                 if keyboardVisible {
                     keyBar
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -80,6 +93,9 @@ struct SessionView: View {
             if case .success(let urls) = result, let url = urls.first {
                 session.sendFile(at: url)
             }
+        }
+        .onChange(of: mode) { _, newValue in
+            UserDefaults.standard.set(newValue.rawValue, forKey: "inputMode")
         }
         .onAppear { scheduleHudDim() }
         .onDisappear { session.disconnect() }
@@ -186,9 +202,19 @@ struct SessionView: View {
                 scheduleHudDim()
             }
 
-            Button {
-                mode = mode == .trackpad ? .direct : .trackpad
-                scheduleHudDim()
+            Menu {
+                ForEach(InputMode.allCases, id: \.self) { option in
+                    Button {
+                        mode = option
+                        scheduleHudDim()
+                    } label: {
+                        if option == mode {
+                            Label(option.label, systemImage: "checkmark")
+                        } else {
+                            Label(option.label, systemImage: option.symbol)
+                        }
+                    }
+                }
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: mode.symbol)
@@ -405,6 +431,8 @@ struct GestureHelpView: View {
         Row(gesture: "Long-press + drag", action: "Hold, then drag"),
         Row(gesture: "2-finger drag", action: "Scroll"),
         Row(gesture: "2-finger tap", action: "Right click"),
+        Row(gesture: "Analog stick", action: "Move the pointer (speed by deflection)"),
+        Row(gesture: "Analog L / R", action: "Hold to drag, tap to click"),
         Row(gesture: "Pinch", action: "Zoom 1×–4× (sharp crop)"),
         Row(gesture: "Double-tap", action: "Toggle 2× zoom"),
         Row(gesture: "Key bar ⌃↑", action: "Mission Control"),

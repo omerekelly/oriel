@@ -41,6 +41,7 @@ top of it.
 | **Window control** | Mission Control, desktop switching, minimise |
 | **Clipboard** | Mac → iPhone automatic; iPhone → Mac on an explicit tap |
 | **Discovery** | Your tailnet's machines listed on the connect screen |
+| **Analog pad** | Game-controller stick, click buttons and scroll in the letterbox |
 | **Multi-display** | Pick which display to stream |
 | **File transfer** | Send files from the iPhone into `~/Downloads/Oriel` |
 | **Adaptive bitrate** | Backs off when latency rises or frames drop, recovers when healthy |
@@ -194,6 +195,11 @@ ObjC exception. Use `standardFormatWithSampleRate` and de-interleave by hand.
 reports *peers*, so the Mac you are connected to would be the one machine missing
 from the picker. `Self` is parsed too, and IPv6-only Funnel ingress nodes are
 dropped by requiring an IPv4 tailnet address.
+
+**The analog pad uses a 60 Hz `CADisplayLink`, not SwiftUI state.** The session
+view re-renders at frame rate, so a SwiftUI timer would be recreated constantly.
+Deflection is squared past a 12% dead zone: fine control near the centre, fast at
+full throw.
 
 **File names are sanitised on arrival.** The receiver takes only the last path
 component and refuses to overwrite, so a crafted name cannot escape
