@@ -408,7 +408,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         capture.setBitrate(target)
-        log("bitrate \(capture.bitrate / 1000) kbps (rtt \(Int(rtt)) ms, drops \(newDrops))")
+        log("bitrate target \(target / 1000) kbps (rtt \(Int(rtt)) ms, drops \(newDrops))")
     }
 
     // MARK: - Launch at login

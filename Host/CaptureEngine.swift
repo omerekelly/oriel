@@ -239,7 +239,7 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate {
         VTSessionSetProperty(created, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: fps as CFNumber)
         // ~7 Mbps ceiling for a laptop-sized desktop; bitrate-limited rather than
         // quality-limited so the client never gets starved behind a slow link.
-        let bitrate = max(2_500_000, min(9_000_000, width * height * 2))
+        let bitrate = max(3_000_000, min(9_000_000, width * height * 3))
         self.bitrate = bitrate
         VTSessionSetProperty(created, key: kVTCompressionPropertyKey_AverageBitRate, value: bitrate as CFNumber)
         let limitBytes = bitrate / 8
