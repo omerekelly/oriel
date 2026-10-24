@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  protocol:
+    name: Protocol tests
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: swift test
+        run: swift test
+
+  host:
+    name: Build host
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build menu-bar app
+        run: ./Host/build.sh
+      - name: Build probe
+        run: ./Tools/build-probe.sh
+
+  ios:
+    name: Build iOS client
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install xcodegen
+        run: brew install xcodegen
+      - name: Generate project
+        run: cd Client && xcodegen generate
+      - name: Build for simulator
+        run: |
+          xcodebuild \
+            -project Client/RemoteMacClient.xcodeproj \
+            -scheme RemoteMacClient \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
