@@ -26,7 +26,8 @@ jobs:
 
   ios:
     name: Build iOS client
-    runs-on: macos-14
+    # XcodeGen emits objectVersion 77, which needs Xcode 16+.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Install xcodegen
