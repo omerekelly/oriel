@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let server = ConnectionServer()
     private let capture = CaptureEngine()
     private let injector = InputInjector()
+    private let clipboard = ClipboardSync()
     private var pairingCode = Pairing.loadOrCreate()
     private var activityToken: NSObjectProtocol?
 
@@ -21,6 +22,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var lastAudioBytes = 0
     private var kbps: Double = 0
     private var audioKbps: Double = 0
+    private var lastClientRTT: Double = 0
+    private var lastDroppedFrames = 0
+    private var lastAdaptAt = Date.distantPast
     private var lastLog = "starting"
     private var startedAt = Date()
 
@@ -55,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.tick()
         }
 
+        clipboard.start()
         configureLaunchAtLoginIfNeeded()
 
         if ProcessInfo.processInfo.environment["REMOTEMAC_SELFTEST"] == "1" {
@@ -79,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        clipboard.stop()
         endActivity()
         server.stop()
     }
@@ -108,6 +114,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.injector.handle(event)
         }
 
+        clipboard.onLocalCopy = { [weak self] payload in
+            guard let self else { return }
+            self.server.broadcast(Framing.packet(type: .clipboard, json: payload))
+            self.log("Clipboard sent to client (\(payload.kind.rawValue))")
+        }
+
+        server.onClipboard = { [weak self] payload in
+            guard let self else { return }
+            self.clipboard.apply(payload)
+            self.log("Clipboard received from client (\(payload.kind.rawValue))")
+        }
+
+        server.onPing = { [weak self] ping in
+            guard let self, ping.rttMicros > 0 else { return }
+            self.lastClientRTT = Double(ping.rttMicros) / 1000
+        }
+
         server.onViewport = { [weak self] viewport in
             guard let self else { return }
             Task { @MainActor [self] in
@@ -124,6 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             Task { @MainActor [self] in
                 self.beginActivity()
+                self.server.broadcast(Framing.packet(type: .peers, json: Tailnet.peers()))
                 await self.ensureCaptureRunning()
             }
         }
@@ -325,6 +349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             lastAudioBytes = capture.audioBytesSent
 
             lastStatsAt = now
+            adaptBitrateIfNeeded()
 
             if let size = capture.displayInfo {
                 let stats = HostStats(fps: capture.measuredFPS,
@@ -355,6 +380,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             activityToken = nil
             log("Display sleep suppression released")
         }
+    }
+
+    // MARK: - Adaptive bitrate
+
+    /// Trims the encoder when the client reports high latency or frames are
+    /// being dropped for being behind, and recovers when the link is healthy.
+    private func adaptBitrateIfNeeded() {
+        guard capture.isStreaming else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastAdaptAt) > 2 else { return }
+        lastAdaptAt = now
+
+        let dropped = server.droppedFrameCount
+        let newDrops = dropped - lastDroppedFrames
+        lastDroppedFrames = dropped
+
+        let rtt = lastClientRTT
+        var target = capture.bitrate
+
+        if rtt > 160 || newDrops > 3 {
+            target = Int(Double(target) * 0.72)
+        } else if rtt > 0, rtt < 70, newDrops == 0 {
+            target = Int(Double(target) * 1.12)
+        } else {
+            return
+        }
+
+        capture.setBitrate(target)
+        log("bitrate \(capture.bitrate / 1000) kbps (rtt \(Int(rtt)) ms, drops \(newDrops))")
     }
 
     // MARK: - Launch at login

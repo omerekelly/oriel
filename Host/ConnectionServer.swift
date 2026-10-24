@@ -43,6 +43,7 @@ final class ConnectionServer {
     private var listenFD: Int32 = -1
     private var listenSource: DispatchSourceRead?
     private var peers: [Int32: Peer] = [:]
+    private var droppedFrames = 0
     private var readSources: [Int32: DispatchSourceRead] = [:]
 
     /// Skip frames once this much video is queued for a single peer, so a slow
@@ -53,6 +54,8 @@ final class ConnectionServer {
     var validateToken: ((String) -> Bool)?
     var onInput: ((InputEvent) -> Void)?
     var onViewport: ((Viewport) -> Void)?
+    var onClipboard: ((ClipboardPayload) -> Void)?
+    var onPing: ((PingMessage) -> Void)?
     var onPeerReady: ((PeerInfo) -> Void)?
     var onPeerGone: ((UUID) -> Void)?
     var onLog: ((String) -> Void)?
@@ -68,6 +71,10 @@ final class ConnectionServer {
     }
 
     var totalBytesSent: Int { queue.sync { peers.values.reduce(0) { $0 + $1.bytesSent } } }
+
+    /// Frames skipped because a peer was behind. A rising count means the link
+    /// cannot keep up with the current bitrate.
+    var droppedFrameCount: Int { queue.sync { droppedFrames } }
 
     // MARK: - Listening
 
@@ -233,7 +240,15 @@ final class ConnectionServer {
                 onViewport?(viewport)
             }
 
+        case .clipboard:
+            if let payload = try? JSONDecoder().decode(ClipboardPayload.self, from: message.payload) {
+                onClipboard?(payload)
+            }
+
         case .ping:
+            if let ping = try? JSONDecoder().decode(PingMessage.self, from: message.payload), !ping.echo {
+                onPing?(ping)
+            }
             send(Framing.packet(type: .ping, payload: message.payload), to: peer)
 
         default:
@@ -303,7 +318,10 @@ final class ConnectionServer {
             let packet = Framing.packet(type: .videoFrame, payload: payload)
 
             for peer in self.peers.values where peer.handshaken {
-                if peer.pendingBytes > self.maxPendingBytes && !frame.isKeyframe { continue }
+                if peer.pendingBytes > self.maxPendingBytes && !frame.isKeyframe {
+                    self.droppedFrames += 1
+                    continue
+                }
                 peer.framesSent += 1
                 self.send(packet, to: peer)
             }

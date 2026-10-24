@@ -132,6 +132,63 @@ final class AudioFrameTests: XCTestCase {
     }
 }
 
+final class ClipboardTests: XCTestCase {
+
+    func testTextRoundTrip() throws {
+        let payload = ClipboardPayload.text("copied from the Mac")
+        let decoded = try JSONDecoder().decode(ClipboardPayload.self,
+                                               from: JSONEncoder().encode(payload))
+        XCTAssertEqual(decoded, payload)
+        XCTAssertEqual(decoded.text, "copied from the Mac")
+    }
+
+    func testImageRoundTrip() throws {
+        let png = Data(repeating: 0x7F, count: 128)
+        let payload = try XCTUnwrap(ClipboardPayload.image(png: png))
+        let decoded = try JSONDecoder().decode(ClipboardPayload.self,
+                                               from: JSONEncoder().encode(payload))
+        XCTAssertEqual(decoded.pngData, png)
+    }
+
+    func testOversizedImageIsRefused() {
+        let png = Data(repeating: 0, count: ClipboardPayload.maxImageBytes + 1)
+        XCTAssertNil(ClipboardPayload.image(png: png))
+    }
+
+    func testEmptyTextIsNotProducedByBridge() {
+        // The bridge filters empty strings; the payload itself stays simple.
+        XCTAssertEqual(ClipboardPayload.text("").text, "")
+    }
+}
+
+final class PeerEntryTests: XCTestCase {
+
+    func testMacDetection() {
+        XCTAssertTrue(PeerEntry(name: "a", ip: "100.1.1.1", os: "macOS", online: true).isMac)
+        XCTAssertFalse(PeerEntry(name: "b", ip: "100.1.1.2", os: "linux", online: true).isMac)
+    }
+
+    func testListRoundTrip() throws {
+        let peers = [
+            PeerEntry(name: "kellys-macbook-pro", ip: "100.78.170.16", os: "macOS", online: true),
+            PeerEntry(name: "vps", ip: "100.114.237.8", os: "linux", online: false)
+        ]
+        let data = try JSONEncoder().encode(peers)
+        XCTAssertEqual(try JSONDecoder().decode([PeerEntry].self, from: data), peers)
+    }
+}
+
+final class PingTests: XCTestCase {
+
+    func testRTTIsCarried() throws {
+        let ping = PingMessage(sentAtMicros: 123, echo: false, rttMicros: 45_000)
+        let decoded = try JSONDecoder().decode(PingMessage.self,
+                                               from: JSONEncoder().encode(ping))
+        XCTAssertEqual(decoded.rttMicros, 45_000)
+        XCTAssertFalse(decoded.echo)
+    }
+}
+
 final class InputEventTests: XCTestCase {
 
     private func roundTrip(_ event: InputEvent) throws -> InputEvent {

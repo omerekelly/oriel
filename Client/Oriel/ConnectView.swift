@@ -15,6 +15,10 @@ struct ConnectView: View {
             VStack(alignment: .leading, spacing: 26) {
                 header
 
+                if !session.peers.isEmpty {
+                    peerList
+                }
+
                 VStack(alignment: .leading, spacing: 14) {
                     field(title: "Tailscale address", text: $host, keyboard: .URL)
                     field(title: "Port", text: $portText, keyboard: .numberPad)
@@ -66,6 +70,47 @@ struct ConnectView: View {
                 Text("Your Mac, from anywhere.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var peerList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("YOUR TAILNET")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            ForEach(session.peers) { peer in
+                Button {
+                    host = peer.ip
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: peer.isMac ? "laptopcomputer" : "display")
+                            .font(.caption)
+                            .foregroundStyle(peer.isMac ? OrielTheme.amber : .secondary)
+                            .frame(width: 16)
+
+                        Text(peer.name)
+                            .font(.system(.subheadline, design: .monospaced))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+
+                        Spacer(minLength: 6)
+
+                        Text(peer.ip)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+
+                        Circle()
+                            .fill(peer.online ? Color.green.opacity(0.8) : Color.gray.opacity(0.5))
+                            .frame(width: 6, height: 6)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(host == peer.ip ? OrielTheme.panelStrong : OrielTheme.panel,
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
             }
         }
     }

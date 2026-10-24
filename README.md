@@ -39,6 +39,9 @@ top of it.
 | **Input** | Trackpad or absolute mode, scroll, right click, drag, modifier chords |
 | **Keyboard** | Full key bar: modifiers, arrows, esc/tab/return, window actions |
 | **Window control** | Mission Control, desktop switching, minimise |
+| **Clipboard** | Mac → iPhone automatic; iPhone → Mac on an explicit tap |
+| **Discovery** | Your tailnet's machines listed on the connect screen |
+| **Adaptive bitrate** | Backs off when latency rises or frames drop, recovers when healthy |
 | **Security** | Pairing code required; nothing listens outside the tailnet |
 
 ## Requirements
@@ -113,6 +116,8 @@ the host sends, so there is no codec negotiation.
 | `0x21 ping` | both | JSON: timestamp, echo flag |
 | `0x22 setViewport` | client → host | JSON: centre x/y, zoom |
 | `0x23 viewportState` | host → client | JSON: applied viewport |
+| `0x24 clipboard` | both ways | JSON: text or base64 PNG (≤4 MB) |
+| `0x25 peers` | host → client | JSON: tailnet inventory |
 | `0x30 stats` | host → client | JSON: fps, bitrate, clients |
 
 ## Layout
@@ -178,13 +183,27 @@ released, which fails as `-12712` on iOS.
 **`AVAudioEngine` rejects interleaved formats** on `connect(to:format:)` with an
 ObjC exception. Use `standardFormatWithSampleRate` and de-interleave by hand.
 
+**The peer list has to include the host itself.** `tailscale status --json` only
+reports *peers*, so the Mac you are connected to would be the one machine missing
+from the picker. `Self` is parsed too, and IPv6-only Funnel ingress nodes are
+dropped by requiring an IPv4 tailnet address.
+
+**Adaptive bitrate is driven by the client's RTT.** The client stamps its measured
+round-trip into each ping; the host trims the encoder ceiling by ~28% when RTT
+exceeds 160 ms or frames are being dropped for being behind, and recovers ~12%
+per step when the link is clean. Bitrate changes are applied to the live
+`VTCompressionSession` — resolution changes would force keyframes.
+
 ## Known limitations
 
 - The Mac must be awake with its display on; a closed lid has no framebuffer.
 - One display per session, no multi-monitor switcher yet.
 - 1600 px long edge, 30 fps, ~7 Mbps ceiling. Not tuned for 4K.
 - Audio is uncompressed PCM (~1.5 Mbps while sound plays).
-- No clipboard sync, file transfer, or microphone input yet.
+- No file transfer or microphone input yet.
+- Clipboard is text and images up to 4 MB; very large screenshots are skipped.
+- Reading the iPhone's clipboard needs a tap, because iOS prompts for cross-app
+  paste. The Mac → iPhone direction is silent.
 - The iPhone cannot act as a microphone: that needs a CoreAudio
   `AudioServerPlugIn` virtual driver, which is a separate piece of work.
 - iOS suspends the app in the background, so a session ends when you switch away.

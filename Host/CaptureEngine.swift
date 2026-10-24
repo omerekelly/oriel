@@ -53,6 +53,7 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate {
     private var audioChunkCount = 0
     private var audioErrorLogged = false
     private(set) var audioConfig: AudioConfig = .defaultPCM
+    private(set) var bitrate = 6_000_000
     private(set) var audioBytesSent = 0
     private var lastConfig: VideoConfig?
     private var lastSentFrameTime: CMTime = .invalid
@@ -238,7 +239,8 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate {
         VTSessionSetProperty(created, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: fps as CFNumber)
         // ~7 Mbps ceiling for a laptop-sized desktop; bitrate-limited rather than
         // quality-limited so the client never gets starved behind a slow link.
-        let bitrate = max(2_500_000, min(12_000_000, width * height * 2))
+        let bitrate = max(2_500_000, min(9_000_000, width * height * 2))
+        self.bitrate = bitrate
         VTSessionSetProperty(created, key: kVTCompressionPropertyKey_AverageBitRate, value: bitrate as CFNumber)
         let limitBytes = bitrate / 8
         VTSessionSetProperty(created, key: kVTCompressionPropertyKey_DataRateLimits,
@@ -492,6 +494,24 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate {
                            height: size.height,
                            parameterSets: sets,
                            nalUnitHeaderLength: Int(headerLength))
+    }
+
+    var isStreaming: Bool { stream != nil }
+
+    /// Adjusts the encoder's ceiling while it runs. This is the main lever for
+    /// adapting to a slow link: resolution changes force keyframes and a
+    /// reconfiguration, bitrate changes are cheap.
+    func setBitrate(_ bitsPerSecond: Int) {
+        let clamped = max(1_500_000, min(12_000_000, bitsPerSecond))
+        queue.async { [weak self] in
+            guard let self, let session = self.session else { return }
+            guard abs(clamped - self.bitrate) > 300_000 else { return }
+            self.bitrate = clamped
+            VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate,
+                                 value: clamped as CFNumber)
+            VTSessionSetProperty(session, key: kVTCompressionPropertyKey_DataRateLimits,
+                                 value: [clamped / 8, 1] as CFArray)
+        }
     }
 
     /// Forces the next encoded frame to be a keyframe. Used when a new client

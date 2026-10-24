@@ -165,6 +165,19 @@ final class Probe {
                 readyToSave = true
             }
 
+        case .peers:
+            if let list = try? JSONDecoder().decode([PeerEntry].self, from: message.payload) {
+                print("peers: " + list.map { "\($0.name)@\($0.ip)\($0.online ? "" : " (offline)")" }.joined(separator: ", "))
+            }
+
+        case .clipboard:
+            if let payload = try? JSONDecoder().decode(ClipboardPayload.self, from: message.payload) {
+                switch payload.kind {
+                case .text: print("clipboard: text \(payload.text ?? "")")
+                case .image: print("clipboard: image \(payload.pngData?.count ?? 0) bytes")
+                }
+            }
+
         case .stats:
             if let stats = try? JSONDecoder().decode(HostStats.self, from: message.payload) {
                 print(String(format: "host stats: %.1f fps, %.0f kbps, %d client(s)", stats.fps, stats.kbps, stats.clients))

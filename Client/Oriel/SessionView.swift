@@ -226,6 +226,7 @@ struct SessionView: View {
                 chordChip("⌃←", flag: EventFlags.control, code: VirtualKey.leftArrow)
                 chordChip("⌃→", flag: EventFlags.control, code: VirtualKey.rightArrow)
                 chordChip("⌘M", flag: EventFlags.command, code: VirtualKey.letter("m") ?? 46)
+                symbolChip("doc.on.clipboard") { session.sendClipboard() }
 
                 Rectangle()
                     .fill(Color.white.opacity(0.18))
@@ -260,6 +261,20 @@ struct SessionView: View {
                 .frame(minWidth: 38, minHeight: 34)
                 .padding(.horizontal, 4)
                 .background(OrielTheme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .foregroundStyle(.white)
+        }
+    }
+
+    private func symbolChip(_ symbol: String, action: @escaping () -> Void) -> some View {
+        Button {
+            action()
+            scheduleHudDim()
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .medium))
+                .frame(minWidth: 38, minHeight: 34)
+                .padding(.horizontal, 4)
+                .background(OrielTheme.panelStrong, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .foregroundStyle(.white)
         }
     }
@@ -374,7 +389,8 @@ struct GestureHelpView: View {
         Row(gesture: "Double-tap", action: "Toggle 2× zoom"),
         Row(gesture: "Key bar ⌃↑", action: "Mission Control"),
         Row(gesture: "Key bar ⌃← / ⌃→", action: "Previous / next desktop"),
-        Row(gesture: "Key bar ⌘M", action: "Minimise window")
+        Row(gesture: "Key bar ⌘M", action: "Minimise window"),
+        Row(gesture: "Key bar ⧉", action: "Send iPhone clipboard to Mac")
     ]
 
     var body: some View {

@@ -25,6 +25,7 @@ final class ClientSession: ObservableObject {
     @Published private(set) var resolutionText: String = "—"
     @Published private(set) var viewport: Viewport = .full
     @Published private(set) var audioChunks = 0
+    @Published private(set) var peers: [PeerEntry] = ClientSession.loadCachedPeers()
 
     /// Decoded frames are pushed straight into the UIKit surface.
     let renderer = FrameSink()
@@ -176,6 +177,17 @@ final class ClientSession: ObservableObject {
                 audio.start(with: config)
             }
 
+        case .clipboard:
+            if let payload = try? JSONDecoder().decode(ClipboardPayload.self, from: payload) {
+                ClipboardBridge.apply(payload)
+            }
+
+        case .peers:
+            if let list = try? JSONDecoder().decode([PeerEntry].self, from: payload) {
+                peers = list
+                ClientSession.cachePeers(list)
+            }
+
         case .audioFrame:
             audioChunks += 1
             audio.enqueue(AudioFrame.pcm(from: payload))
@@ -232,6 +244,27 @@ final class ClientSession: ObservableObject {
         send(.input, event)
     }
 
+    /// User-initiated: reads the iPhone pasteboard and mirrors it to the Mac.
+    @discardableResult
+    func sendClipboard() -> Bool {
+        guard let payload = ClipboardBridge.current() else { return false }
+        send(.clipboard, payload)
+        return true
+    }
+
+    static func cachePeers(_ peers: [PeerEntry]) {
+        guard let data = try? JSONEncoder().encode(peers) else { return }
+        UserDefaults.standard.set(data, forKey: "knownPeers")
+    }
+
+    static func loadCachedPeers() -> [PeerEntry] {
+        guard let data = UserDefaults.standard.data(forKey: "knownPeers"),
+              let peers = try? JSONDecoder().decode([PeerEntry].self, from: data) else {
+            return []
+        }
+        return peers
+    }
+
     /// Applies a zoom/crop locally and asks the host to capture just that region.
     /// Throttled so a pinch does not flood the link with reconfigurations.
     func setViewport(_ proposed: Viewport, immediate: Bool = false) {
@@ -266,7 +299,9 @@ final class ClientSession: ObservableObject {
         pingTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.lastPingSent = Date()
-            self.send(.ping, PingMessage(sentAtMicros: Int64(Date().timeIntervalSince1970 * 1_000_000), echo: false))
+            self.send(.ping, PingMessage(sentAtMicros: Int64(Date().timeIntervalSince1970 * 1_000_000),
+                                         echo: false,
+                                         rttMicros: Int64(self.latencyMS * 1000)))
         }
     }
 

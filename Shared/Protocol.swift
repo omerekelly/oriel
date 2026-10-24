@@ -19,6 +19,8 @@ public enum MessageType: UInt8 {
     case ping        = 0x21   // both ways
     case setViewport = 0x22   // client -> host
     case viewportState = 0x23 // host -> client (echo of the applied viewport)
+    case clipboard   = 0x24   // both ways
+    case peers       = 0x25   // host -> client (tailnet inventory)
     case stats       = 0x30   // host -> client
 }
 
@@ -180,6 +182,66 @@ public struct HostStats: Codable {
 public struct PingMessage: Codable {
     public var sentAtMicros: Int64
     public var echo: Bool
+    /// Filled in by the client so the host can adapt its bitrate to the link.
+    public var rttMicros: Int64
+
+    public init(sentAtMicros: Int64, echo: Bool, rttMicros: Int64 = 0) {
+        self.sentAtMicros = sentAtMicros
+        self.echo = echo
+        self.rttMicros = rttMicros
+    }
+}
+
+/// Clipboard contents, exchanged in both directions. Images travel as base64
+/// PNG and are capped so a large screenshot cannot stall the video stream.
+public struct ClipboardPayload: Codable, Equatable {
+    public enum Kind: String, Codable { case text, image }
+
+    public var kind: Kind
+    public var text: String?
+    public var pngBase64: String?
+
+    public static let maxImageBytes = 4 * 1024 * 1024
+
+    public init(kind: Kind, text: String? = nil, pngBase64: String? = nil) {
+        self.kind = kind
+        self.text = text
+        self.pngBase64 = pngBase64
+    }
+
+    public static func text(_ value: String) -> ClipboardPayload {
+        ClipboardPayload(kind: .text, text: value)
+    }
+
+    public static func image(png: Data) -> ClipboardPayload? {
+        guard png.count <= maxImageBytes else { return nil }
+        return ClipboardPayload(kind: .image, pngBase64: png.base64EncodedString())
+    }
+
+    public var pngData: Data? {
+        guard kind == .image, let pngBase64 else { return nil }
+        return Data(base64Encoded: pngBase64)
+    }
+}
+
+/// One device on the tailnet, offered to the client so addresses do not have to
+/// be typed by hand.
+public struct PeerEntry: Codable, Equatable, Identifiable {
+    public var name: String
+    public var ip: String
+    public var os: String
+    public var online: Bool
+
+    public var id: String { ip }
+
+    public init(name: String, ip: String, os: String, online: Bool) {
+        self.name = name
+        self.ip = ip
+        self.os = os
+        self.online = online
+    }
+
+    public var isMac: Bool { os.lowercased().contains("macos") || os.lowercased() == "mac" }
 }
 
 /// Which part of the display is being streamed, as a centre point plus a zoom
