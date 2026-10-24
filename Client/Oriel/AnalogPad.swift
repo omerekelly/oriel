@@ -28,6 +28,9 @@ final class AnalogPadView: UIView {
 
     private var stickVector = CGPoint.zero
     private var lastScrollY: CGFloat = 0
+    /// Touch deltas arrive in 1–3 pt steps; dividing and truncating each one
+    /// yields 0 forever. Carry the remainder so slow drags still scroll.
+    private var scrollResidual: CGFloat = 0
     private var link: CADisplayLink?
     private var lastTick: CFTimeInterval = 0
 
@@ -166,6 +169,7 @@ final class AnalogPadView: UIView {
             onButton?(1, true)
         case .scroll:
             lastScrollY = point.y
+            scrollResidual = 0
             scrollPad.backgroundColor = UIColor.white.withAlphaComponent(0.10)
         }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -191,8 +195,12 @@ final class AnalogPadView: UIView {
         case .scroll:
             let delta = point.y - lastScrollY
             lastScrollY = point.y
-            let amount = Int(-delta / 4)
-            if amount != 0 { onScroll?(amount) }
+            scrollResidual += -delta * 2.5
+            let amount = Int(scrollResidual)
+            if amount != 0 {
+                scrollResidual -= CGFloat(amount)
+                onScroll?(amount)
+            }
 
         default:
             break
@@ -247,12 +255,12 @@ final class AnalogPadView: UIView {
         guard distance > 4 else { return }
 
         let magnitude = min(1, distance / radius)
-        let deadZone: CGFloat = 0.12
+        let deadZone: CGFloat = 0.15
         guard magnitude > deadZone else { return }
 
-        // Squared response: fine control near the centre, fast at full throw.
-        let curve = pow((magnitude - deadZone) / (1 - deadZone), 1.5)
-        let speed: CGFloat = 1250
+        // Fine control near the centre, fast at full throw.
+        let curve = pow((magnitude - deadZone) / (1 - deadZone), 1.8)
+        let speed: CGFloat = 520
         let dx = stickVector.x / distance * speed * curve * CGFloat(dt)
         let dy = stickVector.y / distance * speed * curve * CGFloat(dt)
         onMove?(dx, dy)
