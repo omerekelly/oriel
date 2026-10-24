@@ -36,8 +36,8 @@ jobs:
       - name: Build for simulator
         run: |
           xcodebuild \
-            -project Client/RemoteMacClient.xcodeproj \
-            -scheme RemoteMacClient \
+            -project Client/OrielClient.xcodeproj \
+            -scheme Oriel \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \

@@ -109,8 +109,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         server.onViewport = { [weak self] viewport in
-            Task { @MainActor in
-                guard let self else { return }
+            guard let self else { return }
+            Task { @MainActor [self] in
                 await self.capture.apply(viewport: viewport)
                 let applied = self.capture.viewport
                 let r = applied.rect
@@ -122,7 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         server.onPeerReady = { [weak self] _ in
             guard let self else { return }
-            Task { @MainActor in
+            Task { @MainActor [self] in
                 self.beginActivity()
                 await self.ensureCaptureRunning()
             }
@@ -130,7 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         server.onPeerGone = { [weak self] _ in
             guard let self else { return }
-            Task { @MainActor in
+            Task { @MainActor [self] in
                 guard self.server.peerCount == 0 else { return }
                 self.injector.releaseAll()
                 self.endActivity()
