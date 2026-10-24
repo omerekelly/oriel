@@ -424,8 +424,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
-        capture.setBitrate(target)
-        log("bitrate target \(target / 1000) kbps (rtt \(Int(rtt)) ms, drops \(newDrops))")
+        // The ramp multiplies without bound; clamp before applying so the log
+        // never reports a rate the encoder is not actually using.
+        let clamped = max(1_500_000, min(9_000_000, target))
+        guard clamped != capture.bitrate else { return }
+        capture.setBitrate(clamped)
+        log("bitrate target \(clamped / 1000) kbps (rtt \(Int(rtt)) ms, drops \(newDrops))")
     }
 
     // MARK: - Launch at login

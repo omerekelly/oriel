@@ -18,6 +18,12 @@ Oriel streams the Mac's display as low-latency HEVC, sends system audio, and
 injects real mouse and keyboard events back. Because it rides Tailscale, the two
 devices find each other from any network: same room, cellular, hotel Wi-Fi.
 
+<p align="center">
+  <img src="brand/screenshots/01-connect.png" width="230" alt="Connect screen listing tailnet machines">
+  <img src="brand/screenshots/02-analog.png" width="230" alt="Session view with the analog controller pad">
+  <img src="brand/screenshots/05-zoom.png" width="360" alt="2x host-side crop showing sharp text">
+</p>
+
 ## Why
 
 Existing remote desktop apps either need a cloud relay, a subscription, or a
