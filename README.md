@@ -6,6 +6,7 @@
 
 [![CI](https://github.com/omerekelly/oriel/actions/workflows/ci.yml/badge.svg)](https://github.com/omerekelly/oriel/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/omerekelly/oriel)](https://github.com/omerekelly/oriel/releases)
 
 **Your Mac, from anywhere.**
 
