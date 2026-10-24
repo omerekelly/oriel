@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>Oriel Host</string>
+	<string>Oriel</string>
 	<key>CFBundleDisplayName</key>
-	<string>Oriel Host</string>
+	<string>Oriel</string>
 	<key>CFBundleExecutable</key>
-	<string>RemoteMacHost</string>
+	<string>Oriel</string>
 	<key>CFBundleIdentifier</key>
-	<string>dev.igho.remotemac.host</string>
+	<string>com.omk.oriel</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundlePackageType</key>

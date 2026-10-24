@@ -13,7 +13,7 @@ git clone <repo> && cd oriel
 swift test
 
 # Host app
-./Host/build.sh && open build/RemoteMacHost.app
+./Host/build.sh && open build/Oriel.app
 
 # Headless verifier
 ./Tools/build-probe.sh
@@ -21,7 +21,7 @@ swift test
 # iOS project
 brew install xcodegen
 cd Client && xcodegen generate
-open RemoteMacClient.xcodeproj
+open OrielClient.xcodeproj
 ```
 
 The Xcode project is generated and not committed. Add files to the filesystem
@@ -53,9 +53,9 @@ Screenshots or a short clip in the PR are worth more than a description.
 | Mouse + keyboard synthesis | `Host/InputInjector.swift` |
 | Pairing codes | `Host/Pairing.swift` |
 | Menu bar, wiring | `Host/AppDelegate.swift` |
-| Connection state | `Client/RemoteMacClient/ClientSession.swift` |
-| Decode + render + gestures | `Client/RemoteMacClient/{SampleBuilder,StreamSurface}.swift` |
-| Session UI | `Client/RemoteMacClient/SessionView.swift` |
+| Connection state | `Client/Oriel/ClientSession.swift` |
+| Decode + render + gestures | `Client/Oriel/{SampleBuilder,StreamSurface}.swift` |
+| Session UI | `Client/Oriel/SessionView.swift` |
 
 ## Style
 

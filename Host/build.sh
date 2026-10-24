@@ -1,11 +1,11 @@
 #!/bin/bash
-# Builds RemoteMacHost.app from the Swift sources without an Xcode project.
+# Builds Oriel.app from the Swift sources without an Xcode project.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
-APP="$ROOT/build/RemoteMacHost.app"
-BIN="$APP/Contents/MacOS/RemoteMacHost"
+APP="$ROOT/build/Oriel.app"
+BIN="$APP/Contents/MacOS/Oriel"
 
 echo "==> Compiling host"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"

@@ -1,4 +1,4 @@
-name: RemoteMacClient
+name: OrielClient
 options:
   bundleIdPrefix: dev.igho.remotemac
   deploymentTarget:
@@ -15,17 +15,17 @@ settings:
     SWIFT_OPTIMIZATION_LEVEL: "-O"
 
 targets:
-  RemoteMacClient:
+  Oriel:
     type: application
     platform: iOS
     sources:
-      - path: RemoteMacClient
+      - path: Oriel
       - path: ../Shared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.omerestanley.remotemac
+        PRODUCT_BUNDLE_IDENTIFIER: com.omk.oriel.ios
         PRODUCT_NAME: Oriel
-        INFOPLIST_FILE: RemoteMacClient/Info.plist
+        INFOPLIST_FILE: Oriel/Info.plist
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
         ENABLE_USER_SCRIPT_SANDBOXING: NO
@@ -33,7 +33,7 @@ targets:
         ENABLE_PREVIEWS: YES
         CODE_SIGN_ENTITLEMENTS: ""
     info:
-      path: RemoteMacClient/Info.plist
+      path: Oriel/Info.plist
       properties:
         CFBundleDisplayName: Oriel
         CFBundleShortVersionString: "1.0"

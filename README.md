@@ -50,19 +50,19 @@ top of it.
 ```bash
 # Host (menu-bar app, no Xcode project needed)
 ./Host/build.sh
-open build/RemoteMacHost.app
+open build/Oriel.app
 
 # iOS client
 brew install xcodegen
 cd Client && xcodegen generate
-open RemoteMacClient.xcodeproj      # then Run onto your device
+open OrielClient.xcodeproj      # then Run onto your device
 ```
 
 Command-line install onto a connected device:
 
 ```bash
 cd Client && xcodegen generate
-xcodebuild -project RemoteMacClient.xcodeproj -scheme RemoteMacClient \
+xcodebuild -project Oriel.xcodeproj -scheme RemoteMacClient \
   -destination 'id=<device-udid>' -allowProvisioningUpdates build
 ```
 
