@@ -21,6 +21,11 @@ public enum MessageType: UInt8 {
     case viewportState = 0x23 // host -> client (echo of the applied viewport)
     case clipboard   = 0x24   // both ways
     case peers       = 0x25   // host -> client (tailnet inventory)
+    case displays    = 0x26   // host -> client
+    case selectDisplay = 0x27 // client -> host
+    case fileOffer   = 0x28   // client -> host
+    case fileChunk   = 0x29   // client -> host
+    case fileComplete = 0x2A  // client -> host
     case stats       = 0x30   // host -> client
 }
 
@@ -122,6 +127,7 @@ public struct Hello: Codable {
 }
 
 public struct DisplayInfo: Codable {
+    public var displayID: UInt32 = 0
     public var pixelWidth: Int
     public var pixelHeight: Int
     /// Point size of the display, used to map incoming normalised cursor
@@ -222,6 +228,64 @@ public struct ClipboardPayload: Codable, Equatable {
         guard kind == .image, let pngBase64 else { return nil }
         return Data(base64Encoded: pngBase64)
     }
+}
+
+/// A display the host can stream.
+public struct DisplayDescriptor: Codable, Equatable, Identifiable {
+    public var id: UInt32
+    public var name: String
+    public var pixelWidth: Int
+    public var pixelHeight: Int
+    public var isMain: Bool
+
+    public init(id: UInt32, name: String, pixelWidth: Int, pixelHeight: Int, isMain: Bool) {
+        self.id = id
+        self.name = name
+        self.pixelWidth = pixelWidth
+        self.pixelHeight = pixelHeight
+        self.isMain = isMain
+    }
+}
+
+public struct FileOffer: Codable {
+    public var name: String
+    public var size: Int
+    public init(name: String, size: Int) {
+        self.name = name
+        self.size = size
+    }
+}
+
+public struct FileComplete: Codable {
+    public var name: String
+    public init(name: String) { self.name = name }
+}
+
+/// Chunk payload: UInt32 big-endian offset, then bytes.
+public enum FileChunk {
+    public static let headerBytes = 4
+
+    public static func encode(offset: Int, data: Data) -> Data {
+        var out = Data(capacity: headerBytes + data.count)
+        var value = UInt32(offset).bigEndian
+        withUnsafeBytes(of: &value) { out.append(contentsOf: $0) }
+        out.append(data)
+        return out
+    }
+
+    public static func decode(_ payload: Data) -> (offset: Int, data: Data)? {
+        guard payload.count > headerBytes else { return nil }
+        var value: UInt32 = 0
+        payload.withUnsafeBytes { raw in
+            withUnsafeMutableBytes(of: &value) { $0.copyBytes(from: raw.prefix(4)) }
+        }
+        return (Int(UInt32(bigEndian: value)), payload.subdata(in: headerBytes..<payload.count))
+    }
+}
+
+public struct SelectDisplayRequest: Codable {
+    public var id: UInt32
+    public init(id: UInt32) { self.id = id }
 }
 
 /// One device on the tailnet, offered to the client so addresses do not have to

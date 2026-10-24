@@ -22,6 +22,8 @@ final class Probe {
         var centerY: Double
         var chord: String?
         var token: String
+        var displayID: UInt32?
+        var sendFile: String?
     }
 
     private let options: Options
@@ -122,6 +124,9 @@ final class Probe {
             displayInfo = info
             print("display: \(info.pixelWidth)x\(info.pixelHeight) px, \(Int(info.pointWidth))x\(Int(info.pointHeight)) pt")
             if options.inputTest { runInputTest() }
+            if let path = options.sendFile {
+                sendFile(path: path)
+            }
             if let chord = options.chord {
                 readyToSave = false
                 print("sending chord: \(chord)")
@@ -165,6 +170,15 @@ final class Probe {
                 readyToSave = true
             }
 
+        case .displays:
+            if let list = try? JSONDecoder().decode([DisplayDescriptor].self, from: message.payload) {
+                print("displays: " + list.map { "\($0.id):\($0.name) \($0.pixelWidth)x\($0.pixelHeight)\($0.isMain ? " main" : "")" }.joined(separator: ", "))
+                if let wanted = options.displayID, list.contains(where: { $0.id == wanted }) {
+                    print("requesting display \(wanted)")
+                    send(.selectDisplay, SelectDisplayRequest(id: wanted))
+                }
+            }
+
         case .peers:
             if let list = try? JSONDecoder().decode([PeerEntry].self, from: message.payload) {
                 print("peers: " + list.map { "\($0.name)@\($0.ip)\($0.online ? "" : " (offline)")" }.joined(separator: ", "))
@@ -186,6 +200,28 @@ final class Probe {
         default:
             break
         }
+    }
+
+    // MARK: - File test
+
+    private func sendFile(path: String) {
+        let url = URL(fileURLWithPath: path)
+        guard let data = try? Data(contentsOf: url) else {
+            print("cannot read \(path)")
+            return
+        }
+        print("sending file \(url.lastPathComponent) (\(data.count) bytes)")
+        send(.fileOffer, FileOffer(name: url.lastPathComponent, size: data.count))
+        let chunk = 64 * 1024
+        var offset = 0
+        while offset < data.count {
+            let end = min(offset + chunk, data.count)
+            connection?.send(content: Framing.packet(type: .fileChunk,
+                                                     payload: FileChunk.encode(offset: offset, data: data.subdata(in: offset..<end))),
+                             completion: .idempotent)
+            offset = end
+        }
+        send(.fileComplete, FileComplete(name: url.lastPathComponent))
     }
 
     // MARK: - Chord test
@@ -388,7 +424,9 @@ var output = "/tmp/remotemac-frame.png"
 var inputTest = false
 var zoom = 1.0
 var chord: String? = nil
-var token = "" 
+var token = ""
+var displayID: UInt32? = nil
+var sendFilePath: String? = nil
 var centerX = 0.5
 var centerY = 0.5
 
@@ -403,6 +441,8 @@ while index < args.count {
     case "--zoom": zoom = Double(args[index + 1]) ?? 1; index += 2
     case "--chord": chord = args[index + 1]; index += 2
     case "--token": token = args[index + 1]; index += 2
+    case "--display": displayID = UInt32(args[index + 1]); index += 2
+    case "--send-file": sendFilePath = args[index + 1]; index += 2
     case "--center":
         let parts = args[index + 1].split(separator: ",")
         if parts.count == 2 {
@@ -416,5 +456,6 @@ while index < args.count {
 
 let probe = Probe(options: .init(host: host, port: port, seconds: seconds, outputPath: output, inputTest: inputTest,
                               zoom: zoom, centerX: centerX, centerY: centerY, chord: chord,
-                              token: token))
+                              token: token, displayID: displayID,
+                              sendFile: sendFilePath))
 exit(probe.run())

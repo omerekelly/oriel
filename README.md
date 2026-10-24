@@ -41,6 +41,8 @@ top of it.
 | **Window control** | Mission Control, desktop switching, minimise |
 | **Clipboard** | Mac → iPhone automatic; iPhone → Mac on an explicit tap |
 | **Discovery** | Your tailnet's machines listed on the connect screen |
+| **Multi-display** | Pick which display to stream |
+| **File transfer** | Send files from the iPhone into `~/Downloads/Oriel` |
 | **Adaptive bitrate** | Backs off when latency rises or frames drop, recovers when healthy |
 | **Security** | Pairing code required; nothing listens outside the tailnet |
 
@@ -118,6 +120,11 @@ the host sends, so there is no codec negotiation.
 | `0x23 viewportState` | host → client | JSON: applied viewport |
 | `0x24 clipboard` | both ways | JSON: text or base64 PNG (≤4 MB) |
 | `0x25 peers` | host → client | JSON: tailnet inventory |
+| `0x26 displays` | host → client | JSON: display list |
+| `0x27 selectDisplay` | client → host | JSON: display id |
+| `0x28 fileOffer` | client → host | JSON: name, size |
+| `0x29 fileChunk` | client → host | `UInt32 offset` + bytes |
+| `0x2A fileComplete` | client → host | JSON: name |
 | `0x30 stats` | host → client | JSON: fps, bitrate, clients |
 
 ## Layout
@@ -188,6 +195,10 @@ reports *peers*, so the Mac you are connected to would be the one machine missin
 from the picker. `Self` is parsed too, and IPv6-only Funnel ingress nodes are
 dropped by requiring an IPv4 tailnet address.
 
+**File names are sanitised on arrival.** The receiver takes only the last path
+component and refuses to overwrite, so a crafted name cannot escape
+`~/Downloads/Oriel`.
+
 **Adaptive bitrate is driven by the client's RTT.** The client stamps its measured
 round-trip into each ping; the host trims the encoder ceiling by ~28% when RTT
 exceeds 160 ms or frames are being dropped for being behind, and recovers ~12%
@@ -200,8 +211,10 @@ per step when the link is clean. Bitrate changes are applied to the live
 - One display per session, no multi-monitor switcher yet.
 - 1600 px long edge, 30 fps, ~7 Mbps ceiling. Not tuned for 4K.
 - Audio is uncompressed PCM (~1.5 Mbps while sound plays).
-- No file transfer or microphone input yet.
+- No microphone input yet.
 - Clipboard is text and images up to 4 MB; very large screenshots are skipped.
+- File transfer is one file at a time, capped at 100 MB, and always lands in
+  `~/Downloads/Oriel` with a non-clobbering name.
 - Reading the iPhone's clipboard needs a tap, because iOS prompts for cross-app
   paste. The Mac → iPhone direction is silent.
 - The iPhone cannot act as a microphone: that needs a CoreAudio

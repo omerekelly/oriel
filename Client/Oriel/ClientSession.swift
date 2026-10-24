@@ -26,6 +26,8 @@ final class ClientSession: ObservableObject {
     @Published private(set) var viewport: Viewport = .full
     @Published private(set) var audioChunks = 0
     @Published private(set) var peers: [PeerEntry] = ClientSession.loadCachedPeers()
+    @Published private(set) var displays: [DisplayDescriptor] = []
+    @Published private(set) var transferStatus: String?
 
     /// Decoded frames are pushed straight into the UIKit surface.
     let renderer = FrameSink()
@@ -63,6 +65,8 @@ final class ClientSession: ObservableObject {
         receivedFrames = 0
         windowStart = Date()
         viewport = .full
+        displays = []
+        transferStatus = nil
         audioChunks = 0
         lastViewportSent = .distantPast
 
@@ -182,6 +186,11 @@ final class ClientSession: ObservableObject {
                 ClipboardBridge.apply(payload)
             }
 
+        case .displays:
+            if let list = try? JSONDecoder().decode([DisplayDescriptor].self, from: payload) {
+                displays = list
+            }
+
         case .peers:
             if let list = try? JSONDecoder().decode([PeerEntry].self, from: payload) {
                 peers = list
@@ -242,6 +251,60 @@ final class ClientSession: ObservableObject {
 
     func sendInput(_ event: InputEvent) {
         send(.input, event)
+    }
+
+    private static let maxFileBytes = 100 * 1024 * 1024
+
+    /// Reads the file off the main thread, then streams it in 64 KB chunks.
+    func sendFile(at url: URL) {
+        transferStatus = "Reading \(url.lastPathComponent)…"
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let accessing = url.startAccessingSecurityScopedResource()
+            let data = try? Data(contentsOf: url)
+            if accessing { url.stopAccessingSecurityScopedResource() }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard let data else {
+                    self.flash("Could not read file")
+                    return
+                }
+                guard data.count <= Self.maxFileBytes else {
+                    self.flash("File is larger than 100 MB")
+                    return
+                }
+                self.deliver(data: data, name: url.lastPathComponent)
+            }
+        }
+    }
+
+    private func deliver(data: Data, name: String) {
+        send(.fileOffer, FileOffer(name: name, size: data.count))
+
+        let chunkSize = 64 * 1024
+        var offset = 0
+        while offset < data.count {
+            let end = min(offset + chunkSize, data.count)
+            sendRaw(.fileChunk, FileChunk.encode(offset: offset, data: data.subdata(in: offset..<end)))
+            offset = end
+        }
+        send(.fileComplete, FileComplete(name: name))
+        flash("Sent \(name)")
+    }
+
+    private func flash(_ message: String) {
+        transferStatus = message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            if self?.transferStatus == message { self?.transferStatus = nil }
+        }
+    }
+
+    private func sendRaw(_ type: MessageType, _ payload: Data) {
+        guard let connection else { return }
+        connection.send(content: Framing.packet(type: type, payload: payload), completion: .idempotent)
+    }
+
+    func selectDisplay(_ id: UInt32) {
+        send(.selectDisplay, SelectDisplayRequest(id: id))
     }
 
     /// User-initiated: reads the iPhone pasteboard and mirrors it to the Mac.

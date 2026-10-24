@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let capture = CaptureEngine()
     private let injector = InputInjector()
     private let clipboard = ClipboardSync()
+    private let files = FileReceiver()
     private var pairingCode = Pairing.loadOrCreate()
     private var activityToken: NSObjectProtocol?
 
@@ -120,10 +121,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.log("Clipboard sent to client (\(payload.kind.rawValue))")
         }
 
+        files.onLog = { [weak self] message in self?.log(message) }
+        server.onFileOffer = { [weak self] offer in self?.files.begin(offer) }
+        server.onFileChunk = { [weak self] offset, data in self?.files.append(offset: offset, data: data) }
+        server.onFileComplete = { [weak self] _ in self?.files.finish() }
+
         server.onClipboard = { [weak self] payload in
             guard let self else { return }
             self.clipboard.apply(payload)
             self.log("Clipboard received from client (\(payload.kind.rawValue))")
+        }
+
+        server.onSelectDisplay = { [weak self] id in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.log("Switching to display \(id)")
+                await self.capture.stop()
+                self.captureRunning = false
+                await self.ensureCaptureRunning(displayID: id)
+            }
         }
 
         server.onPing = { [weak self] ping in
@@ -206,7 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @MainActor
-    private func ensureCaptureRunning() async {
+    private func ensureCaptureRunning(displayID: UInt32? = nil) async {
         guard !captureStarting else { return }
         if captureRunning, let info = capture.displayInfo {
             announce(info)
@@ -220,7 +236,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         wakeDisplay()
 
         do {
-            try await capture.start(maxDimension: 1600, fps: 30)
+            try await capture.start(maxDimension: 1600, fps: 30, displayID: displayID)
             captureRunning = true
             if let info = capture.displayInfo {
                 injector.updateDisplay(pointSize: CGSize(width: info.pointWidth, height: info.pointHeight))
@@ -246,6 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         server.broadcast(Framing.packet(type: .displayInfo, json: info))
         server.broadcast(Framing.packet(type: .viewportState, json: Viewport.full))
         server.broadcast(Framing.packet(type: .audioConfig, json: capture.audioConfig))
+        server.broadcast(Framing.packet(type: .displays, json: capture.displays))
         if let config = capture.greetNewClient() {
             server.broadcast(Framing.packet(type: .videoConfig, json: config))
         }

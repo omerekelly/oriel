@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct SessionView: View {
     @ObservedObject var session: ClientSession
@@ -11,6 +12,7 @@ struct SessionView: View {
     @State private var hudTask: DispatchWorkItem?
     @State private var keyboardHeight: CGFloat = 0
     @State private var showHelp = false
+    @State private var showImporter = false
 
     var body: some View {
         ZStack {
@@ -41,6 +43,16 @@ struct SessionView: View {
                 hud
                     .padding(.horizontal, 12)
                     .padding(.top, 8)
+                if let status = session.transferStatus {
+                    Text(status)
+                        .font(.caption)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(.black.opacity(0.7), in: Capsule())
+                        .overlay(Capsule().strokeBorder(OrielTheme.hairline, lineWidth: 0.5))
+                        .foregroundStyle(.white)
+                        .padding(.bottom, 6)
+                }
                 Spacer(minLength: 0)
                 if keyboardVisible {
                     keyBar
@@ -62,6 +74,13 @@ struct SessionView: View {
                 .opacity(0.01)
         }
         .sheet(isPresented: $showHelp) { GestureHelpView() }
+        .fileImporter(isPresented: $showImporter,
+                      allowedContentTypes: [.item],
+                      allowsMultipleSelection: false) { result in
+            if case .success(let urls) = result, let url = urls.first {
+                session.sendFile(at: url)
+            }
+        }
         .onAppear { scheduleHudDim() }
         .onDisappear { session.disconnect() }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
@@ -227,6 +246,7 @@ struct SessionView: View {
                 chordChip("⌃→", flag: EventFlags.control, code: VirtualKey.rightArrow)
                 chordChip("⌘M", flag: EventFlags.command, code: VirtualKey.letter("m") ?? 46)
                 symbolChip("doc.on.clipboard") { session.sendClipboard() }
+                symbolChip("folder") { showImporter = true }
 
                 Rectangle()
                     .fill(Color.white.opacity(0.18))

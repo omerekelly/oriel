@@ -56,6 +56,10 @@ final class ConnectionServer {
     var onViewport: ((Viewport) -> Void)?
     var onClipboard: ((ClipboardPayload) -> Void)?
     var onPing: ((PingMessage) -> Void)?
+    var onSelectDisplay: ((UInt32) -> Void)?
+    var onFileOffer: ((FileOffer) -> Void)?
+    var onFileChunk: ((Int, Data) -> Void)?
+    var onFileComplete: ((FileComplete) -> Void)?
     var onPeerReady: ((PeerInfo) -> Void)?
     var onPeerGone: ((UUID) -> Void)?
     var onLog: ((String) -> Void)?
@@ -238,6 +242,26 @@ final class ConnectionServer {
         case .setViewport:
             if let viewport = try? JSONDecoder().decode(Viewport.self, from: message.payload) {
                 onViewport?(viewport)
+            }
+
+        case .fileOffer:
+            if let offer = try? JSONDecoder().decode(FileOffer.self, from: message.payload) {
+                onFileOffer?(offer)
+            }
+
+        case .fileChunk:
+            if let chunk = FileChunk.decode(message.payload) {
+                onFileChunk?(chunk.offset, chunk.data)
+            }
+
+        case .fileComplete:
+            if let complete = try? JSONDecoder().decode(FileComplete.self, from: message.payload) {
+                onFileComplete?(complete)
+            }
+
+        case .selectDisplay:
+            if let request = try? JSONDecoder().decode(SelectDisplayRequest.self, from: message.payload) {
+                onSelectDisplay?(request.id)
             }
 
         case .clipboard:

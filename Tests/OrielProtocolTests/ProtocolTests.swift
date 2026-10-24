@@ -161,6 +161,39 @@ final class ClipboardTests: XCTestCase {
     }
 }
 
+final class FileTransferTests: XCTestCase {
+
+    func testChunkRoundTrip() throws {
+        let payload = Data("some file bytes".utf8)
+        let encoded = FileChunk.encode(offset: 4096, data: payload)
+        let decoded = try XCTUnwrap(FileChunk.decode(encoded))
+        XCTAssertEqual(decoded.offset, 4096)
+        XCTAssertEqual(decoded.data, payload)
+    }
+
+    func testChunkHeaderOnlyIsRejected() {
+        XCTAssertNil(FileChunk.decode(Data(repeating: 0, count: FileChunk.headerBytes)))
+    }
+
+    func testOfferRoundTrip() throws {
+        let offer = FileOffer(name: "screenshot.png", size: 12345)
+        let decoded = try JSONDecoder().decode(FileOffer.self, from: JSONEncoder().encode(offer))
+        XCTAssertEqual(decoded.name, "screenshot.png")
+        XCTAssertEqual(decoded.size, 12345)
+    }
+}
+
+final class DisplayTests: XCTestCase {
+
+    func testDescriptorRoundTrip() throws {
+        let display = DisplayDescriptor(id: 2, name: "Main Display", pixelWidth: 1920, pixelHeight: 1080, isMain: true)
+        let decoded = try JSONDecoder().decode(DisplayDescriptor.self,
+                                               from: JSONEncoder().encode(display))
+        XCTAssertEqual(decoded, display)
+        XCTAssertEqual(decoded.id, 2)
+    }
+}
+
 final class PeerEntryTests: XCTestCase {
 
     func testMacDetection() {

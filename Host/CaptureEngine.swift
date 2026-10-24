@@ -61,6 +61,8 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate {
     private var startedAt = Date()
 
     private(set) var displayInfo: DisplayInfo?
+    private(set) var displays: [DisplayDescriptor] = []
+    private(set) var activeDisplayID: UInt32?
     var onFrame: ((EncodedFrame) -> Void)?
     var onVideoConfig: ((VideoConfig) -> Void)?
     var onAudioConfig: ((AudioConfig) -> Void)?
@@ -82,7 +84,7 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate {
 
     // MARK: - Lifecycle
 
-    func start(maxDimension: Int, fps: Int) async throws {
+    func start(maxDimension: Int, fps: Int, displayID: UInt32? = nil) async throws {
         guard stream == nil else { return }
 
         let content: SCShareableContent
@@ -92,7 +94,18 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate {
             throw StartError.streamFailed(error.localizedDescription)
         }
 
-        guard let display = content.displays.first else { throw StartError.noDisplays }
+        displays = content.displays.map { candidate in
+            let isMain = candidate.displayID == CGMainDisplayID()
+            return DisplayDescriptor(id: candidate.displayID,
+                                     name: isMain ? "Main Display" : "Display \(candidate.displayID)",
+                                     pixelWidth: candidate.width,
+                                     pixelHeight: candidate.height,
+                                     isMain: isMain)
+        }
+
+        guard let display = content.displays.first(where: { $0.displayID == displayID })
+                ?? content.displays.first else { throw StartError.noDisplays }
+        activeDisplayID = display.displayID
 
         let aspect = Double(display.height) / Double(display.width)
         let targetWidth = min(maxDimension, display.width)
@@ -101,7 +114,8 @@ final class CaptureEngine: NSObject, SCStreamOutput, SCStreamDelegate {
         let evenH = targetHeight - (targetHeight % 2)
 
         let pointBounds = CGDisplayBounds(display.displayID)
-        displayInfo = DisplayInfo(pixelWidth: evenW,
+        displayInfo = DisplayInfo(displayID: display.displayID,
+                                  pixelWidth: evenW,
                                   pixelHeight: evenH,
                                   pointWidth: Double(pointBounds.width),
                                   pointHeight: Double(pointBounds.height),
