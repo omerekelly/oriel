@@ -74,6 +74,15 @@ cd Client && xcodegen generate
 open OrielClient.xcodeproj      # then Run onto your device
 ```
 
+**Free-team expiry.** With a Personal Team the provisioning profile lasts
+7 days, after which the app stops launching. Renew it with one command:
+
+```bash
+./scripts/reinstall.sh
+```
+
+A paid developer team gives a 1-year profile instead.
+
 Command-line install onto a connected device:
 
 ```bash
