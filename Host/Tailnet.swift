@@ -13,9 +13,7 @@ enum Tailnet {
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
-    static var selfName: String {
-        ProcessInfo.processInfo.hostName.replacingOccurrences(of: ".local", with: "")
-    }
+    static var selfName: String { HostInfo.localHostname }
 
     static func peers() -> [PeerEntry] {
         guard let binary else { return [] }

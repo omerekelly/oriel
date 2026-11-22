@@ -22,6 +22,12 @@
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Oriel advertises itself on your local network so your iPhone can find this Mac without an IP address.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_oriel._tcp</string>
+	</array>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>

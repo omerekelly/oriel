@@ -125,6 +125,15 @@ struct SessionView: View {
                 .fill(session.clientFPS > 0.5 ? OrielTheme.amber : Color.orange)
                 .frame(width: 7, height: 7)
 
+            if let route = session.connectedVia {
+                Text(route)
+                    .font(OrielTheme.mono(9, weight: .semibold))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(OrielTheme.amber.opacity(0.85), in: Capsule())
+                    .foregroundStyle(OrielTheme.ink)
+            }
+
             Text(session.resolutionText)
                 .font(OrielTheme.mono(11))
 

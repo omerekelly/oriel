@@ -28,6 +28,7 @@ final class ClientSession: ObservableObject {
     @Published private(set) var peers: [PeerEntry] = ClientSession.loadCachedPeers()
     @Published private(set) var displays: [DisplayDescriptor] = []
     @Published private(set) var transferStatus: String?
+    @Published private(set) var connectedVia: String?
 
     /// Decoded frames are pushed straight into the UIKit surface.
     let renderer = FrameSink()
@@ -43,6 +44,11 @@ final class ClientSession: ObservableObject {
     private var lastPingSent: Date?
     private var pairingCode = ""
     private var connectedAt = Date()
+    private var targets: [ConnectionTarget] = []
+    private var targetIndex = 0
+    private var isAttempting = false
+    private var pendingLabel = ""
+    private var attemptTimer: Timer?
     private var lastViewportSent = Date.distantPast
 
     init() {
@@ -55,10 +61,42 @@ final class ClientSession: ObservableObject {
 
     // MARK: - Connect
 
+    struct ConnectionTarget {
+        let label: String
+        let endpoint: NWEndpoint
+    }
+
+    /// Suggested label for an address: the tailnet uses the 100.64.0.0/10 range.
+    static func label(for host: String) -> String {
+        host.hasPrefix("100.") ? "Tailscale" : "LAN"
+    }
+
     func connect(host: String, port: UInt16, token: String) {
+        guard let nwPort = NWEndpoint.Port(rawValue: port) else {
+            state = .failed("Invalid port")
+            return
+        }
+        let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: nwPort)
+        connect(targets: [ConnectionTarget(label: Self.label(for: host), endpoint: endpoint)],
+                token: token)
+    }
+
+    /// Tries each target in order, moving on when one fails or does not connect
+    /// within the timeout. The first to reach `.ready` wins, and its label is
+    /// shown in the HUD.
+    func connect(targets: [ConnectionTarget], token: String) {
         disconnect()
         pairingCode = token
+        self.targets = targets
+        targetIndex = 0
+        isAttempting = true
+        resetSession()
+        beginAttempt()
+    }
+
+    private func resetSession() {
         state = .connecting
+        connectedVia = nil
         displayInfo = nil
         videoSize = .zero
         framer = FrameDecoder()
@@ -69,6 +107,19 @@ final class ClientSession: ObservableObject {
         transferStatus = nil
         audioChunks = 0
         lastViewportSent = .distantPast
+    }
+
+    private func beginAttempt() {
+        guard isAttempting else { return }
+        guard targetIndex < targets.count else {
+            isAttempting = false
+            state = .failed("Could not reach the Mac. Check Tailscale, or that you are on the same Wi-Fi.")
+            return
+        }
+
+        let target = targets[targetIndex]
+        pendingLabel = target.label
+        state = .connecting
 
         let parameters = NWParameters.tcp
         parameters.allowLocalEndpointReuse = true
@@ -77,32 +128,46 @@ final class ClientSession: ObservableObject {
             tcp.enableKeepalive = true
             tcp.keepaliveIdle = 5
         }
-        guard let nwPort = NWEndpoint.Port(rawValue: port) else {
-            state = .failed("Invalid port")
-            return
-        }
 
-        let connection = NWConnection(host: NWEndpoint.Host(host), port: nwPort, using: parameters)
+        let connection = NWConnection(to: target.endpoint, using: parameters)
         self.connection = connection
+
+        attemptTimer?.invalidate()
+        attemptTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.isAttempting, self.state != .connected else { return }
+                self.connection?.cancel()
+                self.connection = nil
+                self.targetIndex += 1
+                self.beginAttempt()
+            }
+        }
 
         connection.stateUpdateHandler = { [weak self] newState in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, self.isAttempting else { return }
                 switch newState {
                 case .ready:
+                    self.attemptTimer?.invalidate()
+                    self.attemptTimer = nil
                     self.state = .connected
+                    self.connectedVia = self.pendingLabel
                     self.connectedAt = Date()
                     self.sendHello()
                     self.startPing()
                     self.receive()
-                case .failed(let error):
-                    self.state = .failed(Self.describe(error))
-                case .waiting(let error):
-                    // Tailscale may still be bringing the tunnel up.
-                    self.state = .connecting
-                    _ = error
+                case .failed:
+                    self.attemptTimer?.invalidate()
+                    self.targetIndex += 1
+                    self.beginAttempt()
                 case .cancelled:
-                    if self.state == .connected { self.state = .idle }
+                    // Cancellation after a successful handshake is a close, not
+                    // a reason to try the next route.
+                    if self.state != .connected {
+                        self.attemptTimer?.invalidate()
+                        self.targetIndex += 1
+                        self.beginAttempt()
+                    }
                 default:
                     break
                 }
@@ -112,6 +177,10 @@ final class ClientSession: ObservableObject {
     }
 
     func disconnect() {
+        isAttempting = false
+        targets = []
+        attemptTimer?.invalidate()
+        attemptTimer = nil
         pingTimer?.invalidate()
         pingTimer = nil
         connection?.cancel()

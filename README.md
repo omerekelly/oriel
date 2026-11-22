@@ -25,6 +25,24 @@ devices find each other from any network: same room, cellular, hotel Wi-Fi.
   <img src="brand/screenshots/05-zoom.png" width="360" alt="2x host-side crop showing sharp text">
 </p>
 
+## LAN or Tailscale?
+
+When both devices are on the same network, Oriel connects directly over the
+LAN — Bonjour finds the host, no address to type, and round-trip drops from
+~12 ms to ~0.3 ms. If the local route does not answer within 1.5 s, it falls
+back to the tailnet address, so the same setup works when you are away. The HUD
+shows which route is in use.
+
+**The local route is unencrypted.** Tailscale gives you WireGuard; a direct LAN
+connection does not. That is fine on your home network and not fine on café
+Wi-Fi — use the tailnet there.
+
+Two one-time prompts get in the way the first time:
+
+- **macOS** asks whether Oriel may find devices on local networks. Advertising
+  silently does nothing until it is allowed.
+- **iOS** asks for Local Network access when the app first browses.
+
 ## Why
 
 Existing remote desktop apps either need a cloud relay, a subscription, or a
@@ -47,7 +65,8 @@ top of it.
 | **Keyboard** | Full key bar: modifiers, arrows, esc/tab/return, window actions |
 | **Window control** | Mission Control, desktop switching, minimise |
 | **Clipboard** | Mac → iPhone automatic; iPhone → Mac on an explicit tap |
-| **Discovery** | Your tailnet's machines listed on the connect screen |
+| **Discovery** | Nearby Macs found over Bonjour, plus your tailnet's machines |
+| **Route fallback** | Tries the local network first, falls back to Tailscale |
 | **Analog pad** | Game-controller stick, click buttons and scroll in the letterbox |
 | **Multi-display** | Pick which display to stream |
 | **File transfer** | Send files from the iPhone into `~/Downloads/Oriel` |

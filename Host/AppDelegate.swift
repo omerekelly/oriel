@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let injector = InputInjector()
     private let clipboard = ClipboardSync()
     private let files = FileReceiver()
+    private let advertiser = ServiceAdvertiser()
     private var pairingCode = Pairing.loadOrCreate()
     private var activityToken: NSObjectProtocol?
 
@@ -44,6 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         do {
             try server.start()
             log("Server listening on \(localAddress)")
+            advertiser.onLog = { [weak self] message in self?.log(message) }
+            advertiser.start(port: server.port, name: HostInfo.localHostname)
             log("Pairing code: \(Pairing.display(pairingCode))")
         } catch {
             log("Server failed: \(error.localizedDescription)")
@@ -86,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         clipboard.stop()
+        advertiser.stop()
         endActivity()
         server.stop()
     }
@@ -542,6 +546,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 }
 
 enum HostInfo {
+    /// `ProcessInfo.hostName` performs a reverse lookup through mDNSResponder and
+    /// can block indefinitely on some network configurations — it hung the app at
+    /// launch here. `gethostname` is a plain syscall and returns immediately.
+    static let localHostname: String = {
+        var buffer = [CChar](repeating: 0, count: 256)
+        guard gethostname(&buffer, buffer.count) == 0 else { return "Oriel Host" }
+        return String(cString: buffer).replacingOccurrences(of: ".local", with: "")
+    }()
+
     /// Reads the Tailscale IPv4 address without shelling out on every menu
     /// rebuild: it is stable for the life of the process.
     static let tailscaleIPv4: String? = {
