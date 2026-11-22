@@ -8,17 +8,17 @@ on:
 jobs:
   protocol:
     name: Protocol tests
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: swift test
         run: swift test
 
   host:
     name: Build host
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build menu-bar app
         run: ./Host/build.sh
       - name: Build probe
@@ -29,7 +29,7 @@ jobs:
     # XcodeGen emits objectVersion 77, which needs Xcode 16+.
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install xcodegen
         run: brew install xcodegen
       - name: Generate project
