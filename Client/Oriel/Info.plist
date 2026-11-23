@@ -23,9 +23,11 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSBonjourServices</key>
-	<array/>
+	<array>
+		<string>_oriel._tcp</string>
+	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>RemoteMac connects to your Mac over your private Tailscale network to stream and control its screen.</string>
+	<string>Oriel finds your Mac on the local network so it can stream and control its screen without needing an IP address.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

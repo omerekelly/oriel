@@ -40,8 +40,9 @@ targets:
         CFBundleVersion: "1"
         UILaunchScreen:
           UIColorName: ""
-        NSLocalNetworkUsageDescription: RemoteMac connects to your Mac over your private Tailscale network to stream and control its screen.
-        NSBonjourServices: []
+        NSLocalNetworkUsageDescription: Oriel finds your Mac on the local network so it can stream and control its screen without needing an IP address.
+        NSBonjourServices:
+          - _oriel._tcp
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UISupportedInterfaceOrientations:
