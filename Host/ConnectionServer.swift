@@ -324,6 +324,19 @@ final class ConnectionServer {
         peer.outOffset = 0
     }
 
+    /// Sends the tailnet inventory, minus each peer's own entry: a client has no
+    /// way to recognise itself in the list, so it would otherwise offer to
+    /// connect to its own address.
+    func broadcastPeers(_ peers: [PeerEntry]) {
+        queue.async {
+            for peer in self.peers.values where peer.handshaken {
+                let filtered = peers.filter { $0.ip != peer.address }
+                let data = Framing.packet(type: .peers, json: filtered)
+                self.send(data, to: peer)
+            }
+        }
+    }
+
     func broadcast(_ data: Data) {
         queue.async {
             for peer in self.peers.values where peer.handshaken {

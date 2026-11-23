@@ -167,7 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             Task { @MainActor [self] in
                 self.beginActivity()
-                self.server.broadcast(Framing.packet(type: .peers, json: Tailnet.peers()))
+                self.server.broadcastPeers(Tailnet.peers())
                 await self.ensureCaptureRunning()
             }
         }

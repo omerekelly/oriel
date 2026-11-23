@@ -7,151 +7,354 @@ struct ConnectView: View {
     @AppStorage("lastHost") private var host = "100.78.170.16"
     @AppStorage("lastPort") private var portText = "7801"
     @AppStorage("pairingCode") private var pairingCode = ""
-    @State private var editing = false
+
+    @State private var showManual = false
     @StateObject private var nearby = NearbyBrowser()
+    @FocusState private var codeFocused: Bool
 
     private var port: UInt16 { UInt16(portText) ?? ProtocolLimits.defaultPort }
+    private var busy: Bool { session.state == .connecting }
+    private var ready: Bool { !pairingCode.isEmpty && !busy }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 26) {
+            VStack(spacing: 18) {
                 header
-
-                nearbySection
-
-                if !session.peers.isEmpty {
-                    peerList
-                }
-
-                VStack(alignment: .leading, spacing: 14) {
-                    field(title: "Tailscale address", text: $host, keyboard: .URL)
-                    field(title: "Port", text: $portText, keyboard: .numberPad)
-                    field(title: "Pairing code", text: $pairingCode, keyboard: .asciiCapable)
-                }
-
+                devices
+                pairing
                 connectButton
-
-                if case .failed(let message) = session.state {
-                    Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                if session.state == .connecting {
-                    HStack(spacing: 10) {
-                        ProgressView()
-                        Text("Connecting to \(host)…")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                tips
+                manual
+                footnote
             }
-            .padding(24)
-            .frame(maxWidth: 520, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.top, 14)
+            .padding(.bottom, 24)
+            .frame(maxWidth: .infinity)
         }
+        .scrollBounceBehavior(.basedOnSize)
         .background(Color.black)
         .onAppear { nearby.start() }
         .onDisappear { nearby.stop() }
     }
 
+    // MARK: - Header
+
     private var header: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        HStack(spacing: 12) {
             Image("OrielMark")
                 .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 76, height: 76)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .frame(width: 46, height: 46)
+                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
                         .strokeBorder(OrielTheme.hairline, lineWidth: 1)
                 )
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text("Oriel")
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .font(.system(size: 25, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                 Text("Your Mac, from anywhere.")
-                    .font(.subheadline)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Spacer(minLength: 0)
+
+            if busy { ProgressView().tint(.white) }
         }
     }
 
-    private var nearbySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("NEARBY")
-                .font(.caption2.weight(.semibold))
+    // MARK: - Machines
+
+    private var devices: some View {
+        VStack(spacing: 0) {
+            if !nearby.hosts.isEmpty {
+                sectionHeader("NEARBY")
+                ForEach(Array(nearby.hosts.enumerated()), id: \.element.id) { index, entry in
+                    if index > 0 { divider }
+                    row(icon: "wifi",
+                        name: entry.name,
+                        detail: "Same network",
+                        tag: "LAN",
+                        tint: OrielTheme.amber) {
+                        connectNearby(entry)
+                    }
+                }
+            }
+
+            if !session.peers.isEmpty {
+                if !nearby.hosts.isEmpty { divider }
+                sectionHeader("TAILNET")
+                ForEach(Array(session.peers.enumerated()), id: \.element.id) { index, peer in
+                    if index > 0 { divider }
+                    row(icon: peer.isMac ? "laptopcomputer" : "display",
+                        name: peer.name,
+                        detail: peer.ip,
+                        tag: nil,
+                        tint: peer.online ? .white.opacity(0.75) : .white.opacity(0.3)) {
+                        connectTailnet(peer)
+                    }
+                }
+            }
+
+            if nearby.hosts.isEmpty && session.peers.isEmpty {
+                sectionHeader("MACHINES")
+                emptyRow
+            }
+        }
+        .background(OrielTheme.panel, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(OrielTheme.hairline, lineWidth: 0.5)
+        )
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.top, 11)
+            .padding(.bottom, 5)
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(OrielTheme.hairline)
+            .frame(height: 0.5)
+            .padding(.leading, 48)
+    }
+
+    private func row(icon: String,
+                     name: String,
+                     detail: String,
+                     tag: String?,
+                     tint: Color,
+                     action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 15))
+                    .foregroundStyle(tint)
+                    .frame(width: 22)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(name)
+                        .font(.system(.subheadline, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Text(detail)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 6)
+
+                if let tag {
+                    Text(tag)
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(OrielTheme.amber.opacity(0.9), in: Capsule())
+                        .foregroundStyle(OrielTheme.ink)
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.22))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var emptyRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: nearby.settled ? "wifi.slash" : "wifi")
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)
+                .frame(width: 22)
+
+            Text(nearby.settled
+                 ? "No Macs found nearby. Allow Local Network access, or connect by address below."
+                 : "Looking for Macs on this network…")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+
+            if nearby.settled {
+                Button("Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(OrielTheme.amber)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
+    }
+
+    // MARK: - Pairing
+
+    private var pairing: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("PAIRING CODE")
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
 
-            if nearby.hosts.isEmpty {
-                HStack(spacing: 8) {
-                    Image(systemName: nearby.settled ? "wifi.slash" : "wifi")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 16)
+            HStack(spacing: 10) {
+                Image(systemName: "key.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(pairingCode.isEmpty ? .secondary : OrielTheme.amber)
 
-                    Text(nearby.settled
-                         ? "No nearby Macs. Allow Local Network access in Settings."
-                         : "Searching for Macs on this network…")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Spacer(minLength: 0)
-
-                    if nearby.settled {
-                        Button("Settings") {
-                            if let url = URL(string: UIApplication.openSettingsURLString) {
-                                UIApplication.shared.open(url)
-                            }
-                        }
-                        .font(.caption2.weight(.semibold))
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(OrielTheme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                TextField("8 characters", text: $pairingCode)
+                    .focused($codeFocused)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(.white)
+                    .submitLabel(.go)
+                    .onSubmit { connectManual() }
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(OrielTheme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(codeFocused ? OrielTheme.amber.opacity(0.6) : OrielTheme.hairline,
+                                  lineWidth: 1)
+            )
+        }
+    }
 
-            ForEach(nearby.hosts) { entry in
-                Button {
-                    connectNearby(entry)
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "wifi")
-                            .font(.caption)
-                            .foregroundStyle(OrielTheme.amber)
-                            .frame(width: 16)
+    // MARK: - Actions
 
-                        Text(entry.name)
-                            .font(.system(.subheadline, design: .monospaced))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
+    private var connectButton: some View {
+        Button {
+            if let first = nearby.hosts.first {
+                connectNearby(first)
+            } else if let peer = session.peers.first(where: \.isMac) ?? session.peers.first {
+                connectTailnet(peer)
+            } else {
+                connectManual()
+            }
+        } label: {
+            HStack {
+                Spacer()
+                Text(ready ? "Connect" : (busy ? "Connecting…" : "Enter pairing code"))
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+            .padding(.vertical, 15)
+            .background(ready ? OrielTheme.amber : Color.white.opacity(0.10),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .foregroundStyle(ready ? OrielTheme.ink : .white.opacity(0.35))
+        }
+        .disabled(!ready)
+    }
 
-                        Spacer(minLength: 6)
+    // MARK: - Manual address
 
-                        Text("LAN")
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(OrielTheme.amber.opacity(0.9), in: Capsule())
-                            .foregroundStyle(OrielTheme.ink)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
-                    .background(OrielTheme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    private var manual: some View {
+        VStack(spacing: 12) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) { showManual.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: showManual ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text("Enter address manually")
+                        .font(.caption)
                 }
-                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+
+            if showManual {
+                VStack(spacing: 8) {
+                    compactField("Address", text: $host, keyboard: .URL)
+                    compactField("Port", text: $portText, keyboard: .numberPad)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }
 
-    /// Prefers the local route and falls back to whatever address is typed in,
-    /// so a nearby Mac connects instantly on Wi-Fi and still works remotely.
+    private func compactField(_ title: String, text: Binding<String>, keyboard: UIKeyboardType) -> some View {
+        HStack(spacing: 10) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 62, alignment: .leading)
+            TextField("", text: text)
+                .keyboardType(keyboard)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .font(.system(.subheadline, design: .monospaced))
+                .foregroundStyle(.white)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(OrielTheme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    // MARK: - Footer
+
+    private var footnote: some View {
+        VStack(spacing: 10) {
+            if case .failed(let message) = session.state {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Text("The pairing code is in the Oriel menu bar on your Mac.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary.opacity(0.8))
+                .multilineTextAlignment(.center)
+
+            Text(buildStamp)
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.18))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 2)
+    }
+
+    private var buildStamp: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        guard let path = Bundle.main.executablePath,
+              let attributes = try? FileManager.default.attributesOfItem(atPath: path),
+              let date = attributes[.modificationDate] as? Date else { return "v\(version)" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMM HH:mm"
+        return "v\(version) · built \(formatter.string(from: date))"
+    }
+
+    // MARK: - Connecting
+
+    private func requireCode() -> Bool {
+        if pairingCode.isEmpty {
+            codeFocused = true
+            return false
+        }
+        return true
+    }
+
     private func connectNearby(_ entry: NearbyHost) {
+        guard requireCode() else { return }
         var targets = [ClientSession.ConnectionTarget(label: "LAN", endpoint: entry.endpoint)]
         let typed = host.trimmingCharacters(in: .whitespaces)
         if !typed.isEmpty, let nwPort = NWEndpoint.Port(rawValue: port) {
@@ -162,130 +365,19 @@ struct ConnectView: View {
         session.connect(targets: targets, token: pairingCode)
     }
 
-    private var peerList: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("YOUR TAILNET")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            ForEach(session.peers) { peer in
-                Button {
-                    host = peer.ip
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: peer.isMac ? "laptopcomputer" : "display")
-                            .font(.caption)
-                            .foregroundStyle(peer.isMac ? OrielTheme.amber : .secondary)
-                            .frame(width: 16)
-
-                        Text(peer.name)
-                            .font(.system(.subheadline, design: .monospaced))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-
-                        Spacer(minLength: 6)
-
-                        Text(peer.ip)
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(.secondary)
-
-                        Circle()
-                            .fill(peer.online ? Color.green.opacity(0.8) : Color.gray.opacity(0.5))
-                            .frame(width: 6, height: 6)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
-                    .background(host == peer.ip ? OrielTheme.panelStrong : OrielTheme.panel,
-                                in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-                .buttonStyle(.plain)
-            }
-        }
+    private func connectTailnet(_ peer: PeerEntry) {
+        guard requireCode() else { return }
+        guard let nwPort = NWEndpoint.Port(rawValue: port) else { return }
+        session.connect(targets: [ClientSession.ConnectionTarget(
+            label: ClientSession.label(for: peer.ip),
+            endpoint: .hostPort(host: NWEndpoint.Host(peer.ip), port: nwPort))],
+            token: pairingCode)
     }
 
-    private func field(title: String, text: Binding<String>, keyboard: UIKeyboardType) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title.uppercased())
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-            TextField("", text: text)
-                .keyboardType(keyboard)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .font(.system(.body, design: .monospaced))
-                .textInputAutocapitalization(.characters)
-                .padding(14)
-                .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
-                .foregroundStyle(.white)
-        }
-    }
-
-    private var connectButton: some View {
-        Button {
-            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            session.connect(host: host.trimmingCharacters(in: .whitespaces),
-                            port: port,
-                            token: pairingCode)
-        } label: {
-            HStack {
-                Spacer()
-                if session.state == .connecting {
-                    ProgressView().tint(OrielTheme.ink)
-                } else {
-                    Image(systemName: "play.fill")
-                    Text("Connect")
-                        .fontWeight(.semibold)
-                }
-                Spacer()
-            }
-            .padding(.vertical, 16)
-            .background(OrielTheme.amber, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .foregroundStyle(OrielTheme.ink)
-        }
-        .disabled(session.state == .connecting || host.isEmpty || pairingCode.isEmpty)
-    }
-
-    private var tips: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Before you connect")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            tip("moon.zzz.fill", "The Oriel host is running and shows a mark in the menu bar.")
-            tip("lock.shield.fill", "Screen Recording and Accessibility are granted to Oriel Host.")
-            tip("key.fill", "The pairing code is shown in the Oriel menu bar on the Mac.")
-            tip("network", "Tailscale shows on this iPhone, and the Mac is listed as connected.")
-            Text(buildStamp)
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.25))
-                .padding(.top, 12)
-        }
-        .padding(.top, 8)
-    }
-
-    /// The executable's modification date is the actual build time, which is the
-    /// only reliable way to tell two installs apart (CFBundleVersion is static).
-    private var buildStamp: String {
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
-        guard let path = Bundle.main.executablePath,
-              let attributes = try? FileManager.default.attributesOfItem(atPath: path),
-              let date = attributes[.modificationDate] as? Date else {
-            return "v\(version)"
-        }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d MMM HH:mm"
-        return "v\(version) · built \(formatter.string(from: date))"
-    }
-
-    private func tip(_ symbol: String, _ text: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: symbol)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
-            Text(text)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+    private func connectManual() {
+        guard requireCode() else { return }
+        let trimmed = host.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { showManual = true; return }
+        session.connect(host: trimmed, port: port, token: pairingCode)
     }
 }
