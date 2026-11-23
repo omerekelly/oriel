@@ -18,8 +18,12 @@ struct NearbyHost: Identifiable, Equatable {
 final class NearbyBrowser: ObservableObject {
 
     @Published private(set) var hosts: [NearbyHost] = []
+    /// True once the first browse has had time to produce results, so the UI can
+    /// say "nothing found" instead of "searching" forever.
+    @Published private(set) var settled = false
 
     private var browser: NWBrowser?
+    private var settleTimer: Timer?
 
     func start() {
         stop()
@@ -34,12 +38,21 @@ final class NearbyBrowser: ObservableObject {
         }
         browser.start(queue: .main)
         self.browser = browser
+
+        settled = false
+        settleTimer?.invalidate()
+        settleTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.settled = true }
+        }
     }
 
     func stop() {
+        settleTimer?.invalidate()
+        settleTimer = nil
         browser?.cancel()
         browser = nil
         hosts = []
+        settled = false
     }
 
     private func apply(_ results: Set<NWBrowser.Result>) {
@@ -49,6 +62,7 @@ final class NearbyBrowser: ObservableObject {
             found.append(NearbyHost(id: name, name: name, endpoint: result.endpoint))
         }
         hosts = found.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        if !found.isEmpty { settled = true }
     }
 }
 

@@ -17,9 +17,7 @@ struct ConnectView: View {
             VStack(alignment: .leading, spacing: 26) {
                 header
 
-                if !nearby.hosts.isEmpty {
-                    nearbyList
-                }
+                nearbySection
 
                 if !session.peers.isEmpty {
                     peerList
@@ -82,11 +80,41 @@ struct ConnectView: View {
         }
     }
 
-    private var nearbyList: some View {
+    private var nearbySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("NEARBY")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
+
+            if nearby.hosts.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: nearby.settled ? "wifi.slash" : "wifi")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16)
+
+                    Text(nearby.settled
+                         ? "No nearby Macs. Allow Local Network access in Settings."
+                         : "Searching for Macs on this network…")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 0)
+
+                    if nearby.settled {
+                        Button("Settings") {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                UIApplication.shared.open(url)
+                            }
+                        }
+                        .font(.caption2.weight(.semibold))
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(OrielTheme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
 
             ForEach(nearby.hosts) { entry in
                 Button {
@@ -226,8 +254,26 @@ struct ConnectView: View {
             tip("lock.shield.fill", "Screen Recording and Accessibility are granted to Oriel Host.")
             tip("key.fill", "The pairing code is shown in the Oriel menu bar on the Mac.")
             tip("network", "Tailscale shows on this iPhone, and the Mac is listed as connected.")
+            Text(buildStamp)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.25))
+                .padding(.top, 12)
         }
         .padding(.top, 8)
+    }
+
+    /// The executable's modification date is the actual build time, which is the
+    /// only reliable way to tell two installs apart (CFBundleVersion is static).
+    private var buildStamp: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        guard let path = Bundle.main.executablePath,
+              let attributes = try? FileManager.default.attributesOfItem(atPath: path),
+              let date = attributes[.modificationDate] as? Date else {
+            return "v\(version)"
+        }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMM HH:mm"
+        return "v\(version) · built \(formatter.string(from: date))"
     }
 
     private func tip(_ symbol: String, _ text: String) -> some View {
