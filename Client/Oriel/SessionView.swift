@@ -98,7 +98,6 @@ struct SessionView: View {
             UserDefaults.standard.set(newValue.rawValue, forKey: "inputMode")
         }
         .onAppear { scheduleHudDim() }
-        .onDisappear { session.disconnect() }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
             guard let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
             let height = max(0, UIScreen.main.bounds.height - frame.minY)

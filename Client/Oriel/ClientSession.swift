@@ -45,6 +45,14 @@ final class ClientSession: ObservableObject {
     private var pairingCode = ""
     private var connectedAt = Date()
     private var targets: [ConnectionTarget] = []
+    /// Kept so the session can be re-established after iOS suspends the app,
+    /// without showing the connect screen again.
+    private var lastTargets: [ConnectionTarget] = []
+    private var lastToken = ""
+    /// Last time the host answered a ping. Timers do not run while iOS has the
+    /// app suspended, so a stale value here means the socket is gone even if
+    /// NWConnection still reports `.ready`.
+    private var lastPongAt = Date()
     private var targetIndex = 0
     private var isAttempting = false
     private var pendingLabel = ""
@@ -85,9 +93,11 @@ final class ClientSession: ObservableObject {
     /// within the timeout. The first to reach `.ready` wins, and its label is
     /// shown in the HUD.
     func connect(targets: [ConnectionTarget], token: String) {
-        disconnect()
+        disconnect(keepTargets: true)
         pairingCode = token
         self.targets = targets
+        lastTargets = targets
+        lastToken = token
         targetIndex = 0
         isAttempting = true
         resetSession()
@@ -153,6 +163,7 @@ final class ClientSession: ObservableObject {
                     self.state = .connected
                     self.connectedVia = self.pendingLabel
                     self.connectedAt = Date()
+                    self.lastPongAt = Date()
                     self.sendHello()
                     self.startPing()
                     self.receive()
@@ -177,8 +188,13 @@ final class ClientSession: ObservableObject {
     }
 
     func disconnect() {
+        disconnect(keepTargets: false)
+    }
+
+    private func disconnect(keepTargets: Bool) {
         isAttempting = false
         targets = []
+        if !keepTargets { lastTargets = [] }
         attemptTimer?.invalidate()
         attemptTimer = nil
         pingTimer?.invalidate()
@@ -288,6 +304,7 @@ final class ClientSession: ObservableObject {
                 send(.ping, pong)
             } else if let ping = try? JSONDecoder().decode(PingMessage.self, from: payload), ping.echo, let sent = lastPingSent {
                 latencyMS = Date().timeIntervalSince(sent) * 1000
+                lastPongAt = Date()
             }
 
         default:
@@ -374,6 +391,20 @@ final class ClientSession: ObservableObject {
 
     func selectDisplay(_ id: UInt32) {
         send(.selectDisplay, SelectDisplayRequest(id: id))
+    }
+
+    /// Called when the app returns to the foreground. If the socket died while
+    /// iOS had us suspended, reconnect to the same route silently.
+    func reconnectIfNeeded() {
+        guard !isAttempting, !lastTargets.isEmpty else { return }
+
+        if state == .connected, Date().timeIntervalSince(lastPongAt) < 5 {
+            return   // still live, nothing to do
+        }
+
+        // Either the state is broken, or it claims to be connected but the host
+        // stopped answering — both mean the session has to be rebuilt.
+        connect(targets: lastTargets, token: lastToken)
     }
 
     /// User-initiated: reads the iPhone pasteboard and mirrors it to the Mac.

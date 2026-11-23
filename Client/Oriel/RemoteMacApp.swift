@@ -15,6 +15,7 @@ struct RemoteMacApp: App {
 
 struct RootView: View {
     @ObservedObject var session: ClientSession
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -28,6 +29,9 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: session.state)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { session.reconnectIfNeeded() }
+        }
         .onAppear {
             // Dev affordance: `simctl launch ... -autoconnect` skips the connect
             // screen so the stream can be exercised without tapping.

@@ -371,6 +371,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
             lastStatsAt = now
             adaptBitrateIfNeeded()
+            server.dropIdlePeers(olderThan: 30)
 
             if let size = capture.displayInfo {
                 let stats = HostStats(fps: capture.measuredFPS,

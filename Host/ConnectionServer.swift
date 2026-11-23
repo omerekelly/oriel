@@ -25,6 +25,7 @@ final class ConnectionServer {
         var address = ""
         var framesSent = 0
         var bytesSent = 0
+        var lastPacketAt = Date()
 
         var out = Data()
         var outOffset = 0
@@ -186,6 +187,7 @@ final class ConnectionServer {
             }
 
             if count > 0 {
+                peer.lastPacketAt = Date()
                 peer.decoder.append(Data(bytes: buffer, count: count))
                 while let message = peer.decoder.next() {
                     handle(message, from: peer)
@@ -361,6 +363,21 @@ final class ConnectionServer {
                 }
                 peer.framesSent += 1
                 self.send(packet, to: peer)
+            }
+        }
+    }
+
+    /// iOS suspends a backgrounded app, so its socket goes quiet without
+    /// closing. Dropping silent peers stops the host encoding video for a phone
+    /// that is not looking.
+    func dropIdlePeers(olderThan seconds: TimeInterval) {
+        queue.async {
+            let now = Date()
+            for peer in self.peers.values where peer.handshaken {
+                if now.timeIntervalSince(peer.lastPacketAt) > seconds {
+                    self.onLog?("Dropping idle peer \(peer.name) after \(Int(seconds))s")
+                    self.closePeer(peer)
+                }
             }
         }
     }
