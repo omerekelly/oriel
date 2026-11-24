@@ -12,8 +12,24 @@ cd "$(dirname "$0")/../Client"
 
 UDID="${1:-}"
 if [[ -z "$UDID" ]]; then
-  UDID="$(xcrun devicectl list devices 2>/dev/null \
-    | grep -oE '[0-9A-F]{8}-[0-9A-F]{16}' | head -1 || true)"
+  # Pick a device that is actually reachable. `devicectl list devices` also
+  # lists simulators and offline phones, and a plain grep can select one of
+  # those instead of the connected iPhone.
+  xcrun devicectl list devices --json-output /tmp/oriel-devices.json >/dev/null 2>&1
+  UDID="$(python3 - /tmp/oriel-devices.json <<'PY'
+import json, sys
+try:
+    data = json.load(open(sys.argv[1]))
+except Exception:
+    raise SystemExit
+for dev in data.get("result", {}).get("devices", []):
+    udid = dev.get("hardwareProperties", {}).get("udid")
+    transport = dev.get("connectionProperties", {}).get("transportType")
+    if udid and transport in ("wired", "localNetwork"):
+        print(udid)
+        break
+PY
+)"
 fi
 
 if [[ -z "$UDID" ]]; then
